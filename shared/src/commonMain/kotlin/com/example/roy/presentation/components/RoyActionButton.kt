@@ -1,11 +1,5 @@
 package com.example.roy.presentation.components
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,8 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -35,6 +27,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.roy.presentation.components.feedback.RoyLoadingIndicator
 import com.example.roy.presentation.theme.RoyTheme
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.Res
@@ -98,22 +91,9 @@ internal fun RoyActionButton(
                 modifier = Modifier.alpha(if (isSubmitting) 0f else 1f),
                 style = RoyTheme.typography.button.copy(color = textColor, textAlign = TextAlign.Center),
             )
-            if (isSubmitting) ButtonProgress(textColor)
+            if (isSubmitting) {
+                RoyLoadingIndicator(textColor, Modifier.size(dimensions.spacing.medium))
+            }
         }
-    }
-}
-
-@Composable
-private fun ButtonProgress(color: Color) {
-    val transition = rememberInfiniteTransition(label = "Button progress")
-    val angle by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = 900, easing = LinearEasing)),
-        label = "Button progress angle",
-    )
-    Canvas(Modifier.size(RoyTheme.dimensions.spacing.medium)) {
-        val stroke = Stroke(width = size.minDimension / 8f, cap = StrokeCap.Round)
-        drawArc(color, startAngle = angle, sweepAngle = 270f, useCenter = false, style = stroke)
     }
 }
