@@ -18,37 +18,44 @@ import com.example.roy.presentation.theme.RoyTheme
 @Preview(name = "Primary button light")
 @Composable
 fun RoyPrimaryButtonLightPreview() {
-    RoyTheme(darkTheme = false) { PrimaryButtonPreviewContent() }
+    RoyButtonPreviewSurface(darkTheme = false) { PrimaryButtonPreviewContent() }
 }
 
 @Preview(name = "Primary button dark")
 @Composable
 fun RoyPrimaryButtonDarkPreview() {
-    RoyTheme(darkTheme = true) { PrimaryButtonPreviewContent() }
+    RoyButtonPreviewSurface(darkTheme = true) { PrimaryButtonPreviewContent() }
+}
+
+@Composable
+internal fun RoyButtonPreviewSurface(darkTheme: Boolean, content: @Composable () -> Unit) {
+    RoyTheme(darkTheme = darkTheme) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(RoyTheme.colors.background)
+                .safeContentPadding()
+                .padding(RoyTheme.dimensions.spacing.medium),
+            verticalArrangement = Arrangement.spacedBy(RoyTheme.dimensions.spacing.small),
+        ) {
+            content()
+        }
+    }
 }
 
 @Composable
 private fun PrimaryButtonPreviewContent() {
     var isSubmitting by remember { mutableStateOf(false) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(RoyTheme.colors.background)
-            .safeContentPadding()
-            .padding(RoyTheme.dimensions.spacing.medium),
-        verticalArrangement = Arrangement.spacedBy(RoyTheme.dimensions.spacing.small),
-    ) {
-        PrimaryButton(
-            text = "Продолжить",
-            onClick = { isSubmitting = !isSubmitting },
-            modifier = Modifier.fillMaxWidth(),
-            isSubmitting = isSubmitting,
-        )
-        PrimaryButton(
-            text = "Недоступно",
-            onClick = {},
-            modifier = Modifier.fillMaxWidth(),
-            isEnabled = false,
-        )
-    }
+    PrimaryButton(
+        text = "Продолжить",
+        onClick = { isSubmitting = !isSubmitting },
+        modifier = Modifier.fillMaxWidth(),
+        isSubmitting = isSubmitting,
+    )
+    PrimaryButton(
+        text = "Недоступно",
+        onClick = {},
+        modifier = Modifier.fillMaxWidth(),
+        isEnabled = false,
+    )
 }

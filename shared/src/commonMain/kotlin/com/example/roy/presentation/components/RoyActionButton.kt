@@ -49,6 +49,7 @@ internal fun RoyActionButton(
     isSubmitting: Boolean,
     background: Brush?,
     textColor: Color,
+    outlineColor: Color? = null,
 ) {
     val dimensions = RoyTheme.dimensions
     val shape = RoundedCornerShape(dimensions.radii.button)
@@ -58,7 +59,11 @@ internal fun RoyActionButton(
     val canClick = isEnabled && !isSubmitting
     val progressLabel = if (isSubmitting) stringResource(Res.string.action_in_progress) else null
     val surface = background?.let { Modifier.background(it, shape) } ?: Modifier
-    val focus = if (canClick && isFocused) Modifier.border(2.dp, RoyTheme.colors.textPrimary, shape) else Modifier
+    val outline = when {
+        canClick && isFocused -> Modifier.border(2.dp, RoyTheme.colors.textPrimary, shape)
+        outlineColor != null -> Modifier.border(1.dp, outlineColor, shape)
+        else -> Modifier
+    }
 
     Box(
         modifier = modifier
@@ -84,7 +89,7 @@ internal fun RoyActionButton(
                     scaleY = scale
                 }
                 .then(surface)
-                .then(focus)
+                .then(outline)
                 .padding(horizontal = dimensions.spacing.medium, vertical = dimensions.spacing.small),
             contentAlignment = Alignment.Center,
         ) {
