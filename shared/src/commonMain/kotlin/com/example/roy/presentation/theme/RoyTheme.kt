@@ -10,9 +10,13 @@ import androidx.compose.runtime.staticCompositionLocalOf
 private val LocalRoyColors = compositionLocalOf<RoyColors> { error("RoyTheme is required") }
 private val LocalRoyTypography = staticCompositionLocalOf<RoyTypography> { error("RoyTheme is required") }
 private val LocalRoyDimensions = staticCompositionLocalOf<RoyDimensions> { error("RoyTheme is required") }
+private val LocalRoyDarkTheme = compositionLocalOf<Boolean> { error("RoyTheme is required") }
 private val defaultDimensions = RoyDimensions()
 
 object RoyTheme {
+    val isDark: Boolean
+        @Composable @ReadOnlyComposable get() = LocalRoyDarkTheme.current
+
     val colors: RoyColors
         @Composable @ReadOnlyComposable get() = LocalRoyColors.current
 
@@ -33,6 +37,7 @@ fun RoyTheme(
         LocalRoyColors provides colors,
         LocalRoyTypography provides rememberRoyTypography(),
         LocalRoyDimensions provides defaultDimensions,
+        LocalRoyDarkTheme provides darkTheme,
         content = content,
     )
 }
