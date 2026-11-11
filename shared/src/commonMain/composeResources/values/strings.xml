@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Рой</string>
+    <string name="action_in_progress">Выполняется</string>
 </resources>

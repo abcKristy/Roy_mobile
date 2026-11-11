@@ -12,6 +12,7 @@ data class RoyPrimaryGradient(
 @Immutable
 data class RoyColors(
     val primaryGradient: RoyPrimaryGradient,
+    val primaryActionContent: Color,
     val primaryHover: Color,
     val primaryPressed: Color,
     val secondary: Color,
@@ -39,6 +40,7 @@ internal val RoyLightColors = RoyColors(
         start = Color(0xFFFF3D00),
         end = Color(0xFFFF1744),
     ),
+    primaryActionContent = Color(0xFF121212),
     primaryHover = Color(0xFFFF6E40),
     primaryPressed = Color(0xFFDD2C00),
     secondary = Color(0xFFEEEDEA),
@@ -66,6 +68,7 @@ internal val RoyDarkColors = RoyColors(
         start = Color(0xFFFF3D00),
         end = Color(0xFFFF1744),
     ),
+    primaryActionContent = Color(0xFF121212),
     primaryHover = Color(0xFFFF6E40),
     primaryPressed = Color(0xFFDD2C00),
     secondary = Color(0xFF2A2A2A),
