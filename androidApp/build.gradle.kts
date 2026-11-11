@@ -15,8 +15,11 @@ dependencies {
 
     implementation(libs.androidx.activity.compose)
 
+    implementation(libs.compose.ui)
     implementation(libs.compose.uiToolingPreview)
-    debugImplementation(libs.compose.uiTooling)
+    debugRuntimeOnly(libs.compose.uiTooling)
+    // PreviewActivity uses Material3 to switch between parameterized previews.
+    debugRuntimeOnly(libs.compose.previewMaterial3)
 }
 
 android {
