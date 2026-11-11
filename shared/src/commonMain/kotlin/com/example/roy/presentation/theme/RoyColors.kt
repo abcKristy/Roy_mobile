@@ -13,6 +13,8 @@ data class RoyPrimaryGradient(
 data class RoyColors(
     val primaryGradient: RoyPrimaryGradient,
     val primaryActionContent: Color,
+    val destructiveActionBackground: Color,
+    val destructiveActionContent: Color,
     val primaryHover: Color,
     val primaryPressed: Color,
     val secondary: Color,
@@ -35,12 +37,17 @@ data class RoyColors(
     val surfaceBeige: Color,
 )
 
+private val Ink900 = Color(0xFF121212)
+private val Red600 = Color(0xFFFF1744)
+
 internal val RoyLightColors = RoyColors(
     primaryGradient = RoyPrimaryGradient(
         start = Color(0xFFFF3D00),
-        end = Color(0xFFFF1744),
+        end = Red600,
     ),
-    primaryActionContent = Color(0xFF121212),
+    primaryActionContent = Ink900,
+    destructiveActionBackground = Red600,
+    destructiveActionContent = Ink900,
     primaryHover = Color(0xFFFF6E40),
     primaryPressed = Color(0xFFDD2C00),
     secondary = Color(0xFFEEEDEA),
@@ -66,9 +73,11 @@ internal val RoyLightColors = RoyColors(
 internal val RoyDarkColors = RoyColors(
     primaryGradient = RoyPrimaryGradient(
         start = Color(0xFFFF3D00),
-        end = Color(0xFFFF1744),
+        end = Red600,
     ),
-    primaryActionContent = Color(0xFF121212),
+    primaryActionContent = Ink900,
+    destructiveActionBackground = Red600,
+    destructiveActionContent = Ink900,
     primaryHover = Color(0xFFFF6E40),
     primaryPressed = Color(0xFFDD2C00),
     secondary = Color(0xFF2A2A2A),

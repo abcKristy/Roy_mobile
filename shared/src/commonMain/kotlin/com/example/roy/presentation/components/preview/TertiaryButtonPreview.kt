@@ -1,4 +1,4 @@
-package com.example.roy.presentation.components
+package com.example.roy.presentation.components.preview
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.roy.presentation.components.TertiaryButton
 
 @Preview(name = "Tertiary button light")
 @Composable

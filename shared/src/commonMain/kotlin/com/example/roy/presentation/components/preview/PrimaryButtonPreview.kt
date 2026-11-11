@@ -1,4 +1,4 @@
-package com.example.roy.presentation.components
+package com.example.roy.presentation.components.preview
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.roy.presentation.components.PrimaryButton
 import com.example.roy.presentation.theme.RoyTheme
 
 @Preview(name = "Primary button light")

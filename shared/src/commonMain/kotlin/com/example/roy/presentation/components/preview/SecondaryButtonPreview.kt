@@ -1,4 +1,4 @@
-package com.example.roy.presentation.components
+package com.example.roy.presentation.components.preview
 
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.roy.presentation.components.SecondaryButton
 
 @Preview(name = "Secondary button light")
 @Composable
