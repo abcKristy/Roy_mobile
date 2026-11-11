@@ -6,4 +6,7 @@
     <string name="empty_chats_title">Пока нет чатов</string>
     <string name="empty_chats_body">Чаты появятся после встречи</string>
     <string name="empty_chats_open_map">На карту</string>
+    <string name="tab_profile">Профиль</string>
+    <string name="tab_map">Карта</string>
+    <string name="tab_chats">Мои чаты</string>
 </resources>
