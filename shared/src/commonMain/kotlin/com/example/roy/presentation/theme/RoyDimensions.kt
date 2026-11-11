@@ -29,6 +29,7 @@ class RoyRadii internal constructor() {
     val button = 18.dp
     val textField = 17.dp
     val card = 22.dp
+    val dialog = 26.dp
 }
 
 @Immutable
