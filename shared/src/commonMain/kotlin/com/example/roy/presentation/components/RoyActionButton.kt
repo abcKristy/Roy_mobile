@@ -27,7 +27,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.roy.presentation.components.feedback.RoyLoadingIndicator
+import com.example.roy.presentation.components.indicators.RoyLoadingIndicator
 import com.example.roy.presentation.theme.RoyTheme
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.Res
