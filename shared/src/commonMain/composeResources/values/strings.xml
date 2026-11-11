@@ -1,4 +1,9 @@
 <resources>
     <string name="app_name">Рой</string>
     <string name="action_in_progress">Выполняется</string>
+    <string name="feedback_error_title">Не удалось загрузить</string>
+    <string name="feedback_retry">Повторить</string>
+    <string name="empty_chats_title">Пока нет чатов</string>
+    <string name="empty_chats_body">Чаты появятся после встречи</string>
+    <string name="empty_chats_open_map">На карту</string>
 </resources>
