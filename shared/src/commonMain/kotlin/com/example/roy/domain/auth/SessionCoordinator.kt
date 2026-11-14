@@ -23,8 +23,11 @@ internal class SessionCoordinator(
 ) {
     private val gate = Mutex()
     private val restoreGate = Mutex()
+    private val logoutGate = Mutex()
     private val status = MutableStateFlow<SessionStatus>(SessionStatus.Restoring)
     private var scopeId = 0L
+    private var closing = false
+    private var pendingClear = false
     private var session: AuthSession? = null
     private var readWave = ReadWave()
     private var inFlight: CompletableDeferred<AuthResult<AuthSession>>? = null
@@ -35,6 +38,10 @@ internal class SessionCoordinator(
 
     suspend fun restore(): Unit = restoreGate.withLock {
         val saved = gate.withLock {
+            if (pendingClear) {
+                endSession()
+                return
+            }
             if (status.value is SessionStatus.Active || status.value == SessionStatus.Guest) return
             try {
                 store.read().also { session = it }
@@ -76,7 +83,7 @@ internal class SessionCoordinator(
     }
 
     suspend fun authenticate(credentials: AuthCredentials): AuthResult<Unit> = gate.withLock {
-        if (status.value != SessionStatus.Guest) return AuthResult.Failure(AuthError(AuthErrorCode.UnexpectedResponse))
+        if (closing || status.value != SessionStatus.Guest) return AuthResult.Failure(AuthError(AuthErrorCode.UnexpectedResponse))
         val result = when (credentials) {
             is AuthCredentials.Login -> repository.login(credentials)
             is AuthCredentials.Register -> repository.register(credentials)
@@ -97,7 +104,7 @@ internal class SessionCoordinator(
 
     suspend fun currentUser(): AuthResult<AuthUser> {
         val (observed, observedScope, wave) = gate.withLock {
-            val current = session ?: return expired()
+            val current = session?.takeUnless { closing } ?: return expired()
             if (readWave.result?.isCompleted == true) readWave = ReadWave()
             Triple(current, scopeId, readWave)
         }
@@ -113,9 +120,40 @@ internal class SessionCoordinator(
         }
     }
 
-    private suspend fun refresh(observed: AuthSession, observedScope: Long, wave: ReadWave): AuthResult<AuthSession> {
+    suspend fun logout(): AuthResult<Unit> = logoutGate.withLock {
+        val closingScope = gate.withLock {
+            if (session == null) return AuthResult.Success(Unit)
+            closing = true
+            scopeId
+        }
+        try {
+            gate.withLock { inFlight }?.await()
+            val latest = gate.withLock { session } ?: return AuthResult.Success(Unit)
+            // Repeat only after an explicit rejection of the original access credentials.
+            val initial = repository.logout(latest.accessToken)
+            val result = if (initial.isTerminalAccess()) {
+                when (val refreshed = refresh(latest, closingScope, ReadWave(), forLogout = true)) {
+                    is AuthResult.Success -> repository.logout(refreshed.value.accessToken)
+                    is AuthResult.Failure -> refreshed
+                }
+            } else initial
+            when {
+                result is AuthResult.Success || result.isTerminalAccess() -> withContext(NonCancellable) {
+                    gate.withLock {
+                        if (session != null && scopeId == closingScope) endSession()
+                        else AuthResult.Success(Unit)
+                    }
+                }
+                else -> result
+            }
+        } finally {
+            withContext(NonCancellable) { gate.withLock { closing = false } }
+        }
+    }
+
+    private suspend fun refresh(observed: AuthSession, observedScope: Long, wave: ReadWave, forLogout: Boolean = false): AuthResult<AuthSession> {
         val (flight, owner) = gate.withLock {
-            val current = session ?: return expired()
+            val current = session?.takeUnless { closing && !forLogout } ?: return expired()
             if (scopeId != observedScope || current.user.id != observed.user.id) return expired()
             if (current.refreshToken != observed.refreshToken) return AuthResult.Success(current)
             val running = wave.result ?: inFlight
@@ -216,6 +254,7 @@ internal class SessionCoordinator(
     }
 
     private suspend fun endSession(): AuthResult<Unit> = withContext(NonCancellable) {
+        pendingClear = true
         session = null
         readWave = ReadWave()
         uncommitted = null
@@ -223,6 +262,7 @@ internal class SessionCoordinator(
         scopeId++
         try {
             store.clear()
+            pendingClear = false
             status.value = SessionStatus.Guest
             AuthResult.Success(Unit)
         } catch (failure: Exception) {

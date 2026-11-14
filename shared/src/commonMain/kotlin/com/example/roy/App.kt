@@ -40,7 +40,7 @@ internal fun App(session: SessionCoordinator) {
                 isRetryEnabled = true,
                 onRetry = { scope.launch { session.restore() } },
             )
-            is SessionStatus.Active -> key(current.scopeId) { RoyRootScreen() }
+            is SessionStatus.Active -> key(current.scopeId) { RoyRootScreen(session) }
         }
     }
 }

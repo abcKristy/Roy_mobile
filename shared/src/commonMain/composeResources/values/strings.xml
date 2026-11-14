@@ -42,4 +42,6 @@
     <string name="auth_storage_failed">Не удалось сохранить сессию</string>
     <string name="auth_unavailable">Сервис временно недоступен</string>
     <string name="auth_restore">Восстанавливаем сессию</string>
+    <string name="auth_logout">Выйти из аккаунта</string>
+    <string name="auth_logout_failed">Не удалось выйти из аккаунта. Повторите попытку.</string>
 </resources>
