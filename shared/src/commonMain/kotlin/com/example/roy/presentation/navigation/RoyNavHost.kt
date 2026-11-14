@@ -17,6 +17,7 @@ import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.toRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.roy.presentation.components.feedback.EmptyCourtyardIllustration
@@ -29,6 +30,7 @@ import roy.shared.generated.resources.Res
 import roy.shared.generated.resources.empty_chats_body
 import roy.shared.generated.resources.empty_chats_open_map
 import roy.shared.generated.resources.empty_chats_title
+import roy.shared.generated.resources.map_details
 
 private val tabRoutes = mapOf(
     MainTab.Profile to RoyRoute.Profile,
@@ -41,7 +43,11 @@ internal fun NavDestination?.mainTab(): MainTab = tabRoutes.entries.firstOrNull 
 }?.key ?: MainTab.Map
 
 internal fun NavHostController.openTab(tab: MainTab) {
-    if (currentDestination.mainTab() == tab) return
+    if (currentDestination?.hasRoute(RoyRoute.PointDetails::class) == true && tab == MainTab.Map) {
+        popBackStack()
+        return
+    }
+    if (currentDestination?.hasRoute(tabRoutes.getValue(tab)::class) == true) return
     navigate(tabRoutes.getValue(tab)) {
         launchSingleTop = true
         restoreState = true
@@ -53,10 +59,16 @@ internal fun NavHostController.openTab(tab: MainTab) {
 internal fun RoyNavHost(
     navController: NavHostController,
     profile: @Composable () -> Unit,
+    map: @Composable () -> Unit,
     onOpenMap: () -> Unit,
 ) {
     NavHost(navController = navController, startDestination = RoyRoute.Map, modifier = Modifier.fillMaxSize()) {
-        composable<RoyRoute.Map> { DestinationTitle(MainTab.Map.title) }
+        composable<RoyRoute.Map> { map() }
+        composable<RoyRoute.PointDetails> { entry ->
+            val pointId = entry.toRoute<RoyRoute.PointDetails>().pointId
+            require(pointId.isNotBlank())
+            DestinationTitle(Res.string.map_details)
+        }
         composable<RoyRoute.Profile> { profile() }
         composable<RoyRoute.Chats> {
             Box(

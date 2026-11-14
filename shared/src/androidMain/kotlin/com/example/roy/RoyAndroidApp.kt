@@ -9,14 +9,22 @@ import com.example.roy.data.auth.AndroidAuthHttpTransport
 import com.example.roy.data.auth.AndroidSessionStore
 import com.example.roy.data.auth.AuthRemoteDataSource
 import com.example.roy.domain.auth.SessionCoordinator
+import com.example.roy.data.points.PointRemoteDataSource
+import com.example.roy.domain.map.PointRepository
+import com.example.roy.location.rememberAndroidDeviceLocation
 
 @Composable
 fun RoyAndroidApp(context: Context, origin: String?) {
     val model = viewModel {
-        val repository = AuthRemoteDataSource(origin ?: "https://roy.invalid", AndroidAuthHttpTransport())
-        AndroidAppModel(SessionCoordinator(repository, AndroidSessionStore(context.applicationContext)))
+        val apiOrigin = origin ?: "https://roy.invalid"
+        val transport = AndroidAuthHttpTransport()
+        val repository = AuthRemoteDataSource(apiOrigin, transport)
+        AndroidAppModel(
+            SessionCoordinator(repository, AndroidSessionStore(context.applicationContext)),
+            PointRemoteDataSource(apiOrigin, transport),
+        )
     }
-    App(model.session)
+    App(model.session, model.points, rememberAndroidDeviceLocation(context))
 }
 
-private class AndroidAppModel(val session: SessionCoordinator) : ViewModel()
+private class AndroidAppModel(val session: SessionCoordinator, val points: PointRepository) : ViewModel()
