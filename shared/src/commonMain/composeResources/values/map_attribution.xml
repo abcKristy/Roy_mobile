@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="map_attribution_openfreemap">OpenFreeMap</string>
+    <string name="map_attribution_openmaptiles">© OpenMapTiles</string>
+    <string name="map_attribution_openstreetmap">Data from OpenStreetMap</string>
+</resources>
