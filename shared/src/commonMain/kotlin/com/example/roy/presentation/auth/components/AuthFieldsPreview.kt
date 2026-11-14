@@ -33,6 +33,7 @@ private fun AuthFieldsPreviewContent() {
     var isPasswordVisible by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("Анна") }
     var age by remember { mutableStateOf("11") }
+    var hasConsent by remember { mutableStateOf(false) }
     val spacing = RoyTheme.dimensions.spacing
 
     Column(
@@ -83,6 +84,13 @@ private fun AuthFieldsPreviewContent() {
             imeAction = ImeAction.Done,
             onValueChange = { age = it },
             onImeAction = {},
+        )
+        ConsentCheckbox(
+            isChecked = hasConsent,
+            isEnabled = true,
+            policyVersion = "preview",
+            label = "Согласие с политикой конфиденциальности",
+            onCheckedChange = { hasConsent = it },
         )
     }
 }
