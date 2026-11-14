@@ -50,10 +50,14 @@ internal fun NavHostController.openTab(tab: MainTab) {
 }
 
 @Composable
-internal fun RoyNavHost(navController: NavHostController, onOpenMap: () -> Unit) {
+internal fun RoyNavHost(
+    navController: NavHostController,
+    profile: @Composable () -> Unit,
+    onOpenMap: () -> Unit,
+) {
     NavHost(navController = navController, startDestination = RoyRoute.Map, modifier = Modifier.fillMaxSize()) {
         composable<RoyRoute.Map> { DestinationTitle(MainTab.Map.title) }
-        composable<RoyRoute.Profile> { DestinationTitle(MainTab.Profile.title) }
+        composable<RoyRoute.Profile> { profile() }
         composable<RoyRoute.Chats> {
             Box(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
