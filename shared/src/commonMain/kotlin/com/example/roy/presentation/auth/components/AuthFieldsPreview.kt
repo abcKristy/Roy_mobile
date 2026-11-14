@@ -102,5 +102,11 @@ private fun AuthFieldsPreviewContent() {
             onOpen = {},
             onRetry = {},
         )
+        AuthSubmitButton(
+            text = "Создать профиль",
+            isEnabled = false,
+            isSubmitting = true,
+            onSubmit = {},
+        )
     }
 }
