@@ -34,7 +34,7 @@ internal class AndroidAuthHttpTransport : AuthHttpTransport {
                     val result = try {
                         response.use {
                             val source = it.body?.source()
-                            val body = if (source == null || source.request(MaxAuthResponseBytes.toLong() + 1)) ""
+                            val body = if (source == null || source.request(request.maxResponseBytes.toLong() + 1)) ""
                             else source.readUtf8()
                             AuthHttpResponse(it.code, body)
                         }

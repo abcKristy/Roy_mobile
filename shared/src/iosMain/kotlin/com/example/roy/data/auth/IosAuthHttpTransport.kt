@@ -56,7 +56,9 @@ internal class IosAuthHttpTransport : AuthHttpTransport {
         val task = session.dataTaskWithRequest(wireRequest, completionHandler = { data, response, error ->
             val http = response as? NSHTTPURLResponse
             continuation.resume(
-                if (error == null && http != null) AuthHttpResponse(http.statusCode.toInt(), data?.utf8Text().orEmpty())
+                if (error == null && http != null) {
+                    AuthHttpResponse(http.statusCode.toInt(), data?.utf8Text(request.maxResponseBytes).orEmpty())
+                }
                 else null
             )
             session.finishTasksAndInvalidate()
@@ -79,8 +81,8 @@ internal class IosAuthHttpTransport : AuthHttpTransport {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun NSData.utf8Text(): String {
-    if (length == 0UL || length > MaxAuthResponseBytes.toULong()) return ""
+private fun NSData.utf8Text(maxResponseBytes: Int): String {
+    if (length == 0UL || length > maxResponseBytes.toULong()) return ""
     val result = ByteArray(length.toInt())
     result.usePinned { memcpy(it.addressOf(0), bytes, length) }
     return result.decodeToString()

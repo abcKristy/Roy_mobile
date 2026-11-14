@@ -54,6 +54,7 @@ kotlin {
             implementation(libs.maplibre.compose)
         }
         androidMain.dependencies {
+            implementation(libs.androidx.activity.compose)
             implementation(libs.okhttp)
             runtimeOnly(libs.maplibre.runtime.opengl)
         }
