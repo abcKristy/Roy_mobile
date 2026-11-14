@@ -17,7 +17,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -60,7 +63,7 @@ internal fun AuthView(
         (viewState.policy != null && !viewState.policyLoading &&
             viewState.acceptedPrivacyPolicyVersion == viewState.policy.version))
     val spacing = RoyTheme.dimensions.spacing
-    val phoneFocus = remember { FocusRequester() }
+    var phoneFocusRequest by remember { mutableIntStateOf(0) }
     val passwordFocus = remember { FocusRequester() }
     val ageFocus = remember { FocusRequester() }
     val focus = LocalFocusManager.current
@@ -100,7 +103,7 @@ internal fun AuthView(
                         errorText = errors[AuthField.DisplayName],
                         isEnabled = enabled,
                         onValueChange = { eventHandler(AuthViewEvent.DisplayNameChanged(it)) },
-                        onImeNext = { phoneFocus.requestFocus() },
+                        onImeNext = { phoneFocusRequest++ },
                     )
                 }
                 val phoneLabel = stringResource(Res.string.auth_phone)
@@ -112,7 +115,7 @@ internal fun AuthView(
                     isEnabled = enabled,
                     onValueChange = { eventHandler(AuthViewEvent.PhoneChanged(it)) },
                     onImeNext = { passwordFocus.requestFocus() },
-                    modifier = Modifier.focusRequester(phoneFocus),
+                    focusRequest = phoneFocusRequest,
                 )
                 PasswordField(
                     value = password,
