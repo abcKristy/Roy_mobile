@@ -20,7 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.contentDescription as describeContent
 import androidx.compose.ui.semantics.error
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -39,6 +39,7 @@ fun RoyTextField(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     onImeAction: ((ImeAction) -> Unit)? = null,
+    contentDescription: String = label,
 ) {
     val colors = RoyTheme.colors
     val typography = RoyTheme.typography
@@ -63,7 +64,7 @@ fun RoyTextField(
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics {
-                    contentDescription = label
+                    describeContent = contentDescription
                     errorText?.let { error(it) }
                 },
             enabled = isEnabled,
