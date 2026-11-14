@@ -8,6 +8,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.backhandler.BackHandler
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -52,10 +55,20 @@ private fun AuthScreen(mode: AuthMode, session: SessionCoordinator, onSwitchMode
     val model = viewModel { AuthViewModel(mode, session, ValidateAuthInput()) }
     val state by model.viewState.collectAsStateWithLifecycle()
     SuppressBackWhileSubmitting(state.submitting)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var modeSwitchRequested by remember { mutableStateOf(false) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { modeSwitchRequested = false }
     var password by remember { mutableStateOf("") }
     var policyOpenFailed by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
-    val eventHandler: (AuthViewEvent) -> Unit = { event ->
+    val eventHandler: (AuthViewEvent) -> Unit = handleEvent@{ event ->
+        if (event == AuthViewEvent.SwitchMode) {
+            if (modeSwitchRequested || model.viewState.value.submitting ||
+                lifecycle.currentState != Lifecycle.State.RESUMED
+            ) return@handleEvent
+            // The outgoing destination can still receive taps while its navigation action is queued.
+            modeSwitchRequested = true
+        }
         if (event is AuthViewEvent.PasswordChanged && !model.viewState.value.submitting) password = event.value
         if (event is AuthViewEvent.Submit || event == AuthViewEvent.RetryPolicy) policyOpenFailed = false
         model.handleEvent(event)
