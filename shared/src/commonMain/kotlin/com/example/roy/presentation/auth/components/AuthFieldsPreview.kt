@@ -30,6 +30,7 @@ internal fun AuthFieldsDarkPreview() {
 private fun AuthFieldsPreviewContent() {
     var phone by remember { mutableStateOf("+79990000001") }
     var password by remember { mutableStateOf("demo-password") }
+    var isPasswordVisible by remember { mutableStateOf(false) }
     val spacing = RoyTheme.dimensions.spacing
 
     Column(
@@ -53,6 +54,16 @@ private fun AuthFieldsPreviewContent() {
             imeAction = ImeAction.Done,
             onValueChange = { password = it },
             onImeAction = {},
+            isVisible = isPasswordVisible,
+            visibilityButton = {
+                PasswordVisibilityButton(
+                    isVisible = isPasswordVisible,
+                    isEnabled = true,
+                    showLabel = "Показать пароль",
+                    hideLabel = "Скрыть пароль",
+                    onToggle = { isPasswordVisible = !isPasswordVisible },
+                )
+            },
         )
     }
 }

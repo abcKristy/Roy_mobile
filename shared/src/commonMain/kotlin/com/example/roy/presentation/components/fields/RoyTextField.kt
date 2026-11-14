@@ -6,6 +6,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -17,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -40,6 +42,7 @@ fun RoyTextField(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     onImeAction: ((ImeAction) -> Unit)? = null,
     contentDescription: String = label,
+    trailingContent: (@Composable () -> Unit)? = null,
 ) {
     val colors = RoyTheme.colors
     val typography = RoyTheme.typography
@@ -76,21 +79,27 @@ fun RoyTextField(
             interactionSource = interactions,
             cursorBrush = SolidColor(colors.accent),
             decorationBox = { innerField ->
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = dimensions.textFieldMinHeight)
                         .background(if (isEnabled) colors.surfaceElevated else colors.surface, shape)
                         .border(borderWidth, borderColor, shape)
                         .padding(horizontal = dimensions.spacing.medium, vertical = dimensions.spacing.small),
-                    verticalArrangement = Arrangement.spacedBy(dimensions.spacing.small),
+                    verticalAlignment = if (trailingContent == null) Alignment.Top else Alignment.CenterVertically,
                 ) {
-                    BasicText(
-                        text = label,
-                        modifier = Modifier.clearAndSetSemantics {},
-                        style = typography.caption.copy(color = labelColor),
-                    )
-                    innerField()
+                    Column(
+                        Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(dimensions.spacing.small),
+                    ) {
+                        BasicText(
+                            text = label,
+                            modifier = Modifier.clearAndSetSemantics {},
+                            style = typography.caption.copy(color = labelColor),
+                        )
+                        innerField()
+                    }
+                    trailingContent?.invoke()
                 }
             },
         )

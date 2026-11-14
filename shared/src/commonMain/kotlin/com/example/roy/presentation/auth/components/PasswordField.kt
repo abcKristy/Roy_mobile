@@ -20,6 +20,7 @@ internal fun PasswordField(
     onImeAction: () -> Unit,
     modifier: Modifier = Modifier,
     isVisible: Boolean = false,
+    visibilityButton: (@Composable () -> Unit)? = null,
 ) {
     RoyTextField(
         value = value,
@@ -35,5 +36,6 @@ internal fun PasswordField(
         ),
         visualTransformation = if (isVisible) VisualTransformation.None else PasswordVisualTransformation(),
         onImeAction = { onImeAction() },
+        trailingContent = visibilityButton,
     )
 }
