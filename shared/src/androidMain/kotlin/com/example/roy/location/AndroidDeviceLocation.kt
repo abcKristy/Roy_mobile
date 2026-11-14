@@ -21,6 +21,9 @@ import com.example.roy.domain.location.DeviceLocation
 import com.example.roy.domain.location.DeviceLocationResult
 import com.example.roy.domain.map.Position
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
@@ -95,19 +98,40 @@ private suspend fun currentLocation(context: Context, manager: LocationManager):
 
     val enabled = manager.getProviders(true)
     val isPrecise = context.hasPermission(ACCESS_FINE_LOCATION)
-    val provider = when {
-        LocationManager.FUSED_PROVIDER in enabled -> LocationManager.FUSED_PROVIDER
-        isPrecise && LocationManager.GPS_PROVIDER in enabled -> LocationManager.GPS_PROVIDER
-        LocationManager.NETWORK_PROVIDER in enabled -> LocationManager.NETWORK_PROVIDER
-        else -> return DeviceLocationResult.Unavailable
+    val providers = buildList {
+        if (isPrecise && LocationManager.GPS_PROVIDER in enabled) add(LocationManager.GPS_PROVIDER)
+        if (LocationManager.FUSED_PROVIDER in enabled) add(LocationManager.FUSED_PROVIDER)
+        if (isEmpty() && LocationManager.NETWORK_PROVIDER in enabled) add(LocationManager.NETWORK_PROVIDER)
     }
+    if (providers.isEmpty()) return DeviceLocationResult.Unavailable
 
     val location = try {
-        withTimeoutOrNull(15_000) { requestLocation(context, manager, provider) }
+        withTimeoutOrNull(15_000) {
+            coroutineScope {
+                val fixes = Channel<Location?>(providers.size)
+                val requests = providers.map { provider ->
+                    launch {
+                        val fix = try {
+                            requestLocation(context, manager, provider)
+                        } catch (_: IllegalArgumentException) {
+                            null
+                        }
+                        fixes.send(fix)
+                    }
+                }
+                try {
+                    repeat(providers.size) {
+                        fixes.receive()?.let { return@coroutineScope it }
+                    }
+                    null
+                } finally {
+                    requests.forEach { it.cancel() }
+                    fixes.cancel()
+                }
+            }
+        }
     } catch (_: SecurityException) {
         return DeviceLocationResult.Restricted
-    } catch (_: IllegalArgumentException) {
-        null
     }
 
     return when {
