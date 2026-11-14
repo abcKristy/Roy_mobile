@@ -23,6 +23,9 @@ data class MapSurfaceState(
     val cameraCommand: MapCameraCommand? = null,
     val markers: List<MapMarker> = emptyList(),
     val selectedPointId: String? = null,
+    val devicePosition: Position? = null,
+    val onCameraApplied: (Long) -> Unit = {},
+    val onCameraSettled: (MapCamera) -> Unit = {},
 )
 
 data class MapCamera(
@@ -46,6 +49,8 @@ enum class MapRenderStatus {
 data class MapMarker(
     val pointId: String,
     val position: Position,
+    val label: String = "",
+    val topicKeys: List<String> = emptyList(),
 ) {
     init {
         require(pointId.isNotBlank()) { "Point ID must not be blank" }

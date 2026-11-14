@@ -94,3 +94,11 @@ Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
 ---
 
 Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+
+## Guest map
+
+The Map tab opens for guests and starts in Moscow. The Profile tab opens sign-in for guests. Point requests use the configured API origin and send no bearer token. The basemap uses the OpenFreeMap Liberty and Dark styles selected in `MapStyleConfig`, with OpenFreeMap, OpenMapTiles and OpenStreetMap attribution. Device location is requested from the map button and uses foreground permission on Android and When In Use on iOS.
+
+For Android Debug, run the backend with synthetic PostGIS fixtures, then map device port 18080 to the backend's local port with `adb reverse tcp:18080 tcp:<backend-port>`. Build and check with `./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug` and run `./gradlew :shared:connectedAndroidDeviceTest` on an attached test device. For iOS, set `ROY_API_ORIGIN` in the Debug scheme and run the `iosApp` scheme on a Mac. Kotlin framework compilation is separate from linking and launching the app in Xcode.
+
+The next mobile slices can use `PointRepository`, `RoyRoute.PointDetails(pointId)`, the map's `onPositionTapped(Position)` callback, and `MapViewEvent.FilterChanged`. See the [map cards and acceptance evidence](../../spec/plans/tasks/M1/T4/README.md).
