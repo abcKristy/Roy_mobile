@@ -58,6 +58,26 @@ Baseline on 2026-11-11 before editing application sources:
 
 ### Running the apps
 
+#### Local access and session
+
+The mobile authentication implementation was integrated on 2026-11-14 at
+`f21b0c42a92d98dae44fb24b0cc66842945d30e1`. It covers login, registration, consent,
+encrypted session storage, restart verification, refresh and logout. The
+[specification](../../spec/plans/tasks/M1/T2/README.md) records acceptance status.
+
+- Run the [local backend](../backend/README.md) at `127.0.0.1:18080`, with
+  the same `PUBLIC_BASE_URL` and local policy enabled. Use synthetic fixtures.
+- For Android Debug, run `adb reverse tcp:18080 tcp:18080` on the target device
+  before launching the app. The debug network configuration permits the
+  loopback connection.
+- For iOS Debug, start the backend on the Mac and run the `iosApp` scheme in
+  the simulator. The scheme can set `ROY_API_ORIGIN` to the configured API
+  origin. Kotlin compilation passed for both iOS targets on Windows. SwiftUI
+  linking, simulator tests, launch and Keychain require macOS with Xcode.
+- The tested backend returns the session ID in the refresh response's
+  `user.id`. The client verifies the account through `/me` before persisting a
+  mismatched snapshot. [Backend issue](../backlog/backend/refresh-account-identity.md).
+
 Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and options:
 
 - Android app: `./gradlew :androidApp:assembleDebug`
