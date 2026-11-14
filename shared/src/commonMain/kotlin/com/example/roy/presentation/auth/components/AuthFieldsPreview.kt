@@ -31,12 +31,21 @@ private fun AuthFieldsPreviewContent() {
     var phone by remember { mutableStateOf("+79990000001") }
     var password by remember { mutableStateOf("demo-password") }
     var isPasswordVisible by remember { mutableStateOf(false) }
+    var name by remember { mutableStateOf("Анна") }
     val spacing = RoyTheme.dimensions.spacing
 
     Column(
         modifier = Modifier.background(RoyTheme.colors.background).padding(spacing.comfortable),
         verticalArrangement = Arrangement.spacedBy(spacing.small),
     ) {
+        DisplayNameField(
+            value = name,
+            label = "Имя",
+            errorText = null,
+            isEnabled = true,
+            onValueChange = { name = it },
+            onImeNext = {},
+        )
         PhoneField(
             value = phone,
             label = "Телефон",
