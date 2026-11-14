@@ -58,4 +58,5 @@ internal enum class AuthErrorCode {
     ServiceUnavailable,
     Network,
     UnexpectedResponse,
+    Storage,
 }
