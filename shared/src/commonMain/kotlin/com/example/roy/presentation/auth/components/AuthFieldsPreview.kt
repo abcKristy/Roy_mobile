@@ -92,5 +92,15 @@ private fun AuthFieldsPreviewContent() {
             label = "Согласие с политикой конфиденциальности",
             onCheckedChange = { hasConsent = it },
         )
+        PolicyLink(
+            url = null,
+            isLoading = false,
+            isEnabled = true,
+            policyLabel = "Политика конфиденциальности",
+            loadingLabel = "Загружаем политику",
+            retryLabel = "Политика недоступна. Повторить",
+            onOpen = {},
+            onRetry = {},
+        )
     }
 }
