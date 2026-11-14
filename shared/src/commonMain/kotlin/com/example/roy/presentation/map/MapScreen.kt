@@ -24,6 +24,8 @@ import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.roy.domain.map.Position
 import com.example.roy.presentation.components.TertiaryButton
@@ -52,6 +54,7 @@ internal fun MapScreen(
     val state by viewModel.viewState.collectAsStateWithLifecycle()
     val gone = stringResource(Res.string.map_point_gone)
     val eventHandler: (MapViewEvent) -> Unit = remember(viewModel) { viewModel::handleEvent }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { eventHandler(MapViewEvent.ScreenResumed) }
     DisposableEffect(viewModel) {
         onDispose { eventHandler(MapViewEvent.ScreenLeft) }
     }

@@ -40,23 +40,32 @@ internal fun rememberAndroidDeviceLocation(context: Context): DeviceLocation {
     DisposableEffect(request) { onDispose { request.cancel() } }
 
     return remember(context, activity, request, launcher) {
-        DeviceLocation {
-            val manager = context.getSystemService(LocationManager::class.java)
-            when {
-                manager == null || activity == null -> DeviceLocationResult.Unavailable
-                !LocationManagerCompat.isLocationEnabled(manager) -> DeviceLocationResult.Disabled
-                else -> {
-                    val permissionCompleted = context.hasLocationPermission() || request.await {
-                        launcher.launch(arrayOf(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION))
-                    }
-                    when {
-                        context.hasLocationPermission() -> currentLocation(context, manager)
-                        !permissionCompleted ||
-                            activity.shouldShowRequestPermissionRationale(ACCESS_COARSE_LOCATION) ||
-                            activity.shouldShowRequestPermissionRationale(ACCESS_FINE_LOCATION) ->
-                            DeviceLocationResult.Denied
-                        else -> DeviceLocationResult.Restricted
-                    }
+        object : DeviceLocation {
+            override fun accessProblem(): DeviceLocationResult? {
+                val manager = context.getSystemService(LocationManager::class.java)
+                    ?: return DeviceLocationResult.Unavailable
+                return when {
+                    !LocationManagerCompat.isLocationEnabled(manager) -> DeviceLocationResult.Disabled
+                    !context.hasLocationPermission() -> DeviceLocationResult.Restricted
+                    else -> null
+                }
+            }
+
+            override suspend fun locate(): DeviceLocationResult {
+                val manager = context.getSystemService(LocationManager::class.java)
+                if (manager == null || activity == null) return DeviceLocationResult.Unavailable
+                if (!LocationManagerCompat.isLocationEnabled(manager)) return DeviceLocationResult.Disabled
+
+                val permissionCompleted = context.hasLocationPermission() || request.await {
+                    launcher.launch(arrayOf(ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION))
+                }
+                return when {
+                    context.hasLocationPermission() -> currentLocation(context, manager)
+                    !permissionCompleted ||
+                        activity.shouldShowRequestPermissionRationale(ACCESS_COARSE_LOCATION) ||
+                        activity.shouldShowRequestPermissionRationale(ACCESS_FINE_LOCATION) ->
+                        DeviceLocationResult.Denied
+                    else -> DeviceLocationResult.Restricted
                 }
             }
         }

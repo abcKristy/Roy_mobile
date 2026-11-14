@@ -55,6 +55,7 @@ internal sealed class MapViewEvent {
     data class CameraApplied(val requestId: Long) : MapViewEvent()
     data class CameraSettled(val camera: MapCamera) : MapViewEvent()
     data object LocateRequested : MapViewEvent()
+    data object ScreenResumed : MapViewEvent()
     data object ScreenLeft : MapViewEvent()
     data object PreviewClosed : MapViewEvent()
     data object DetailsRequested : MapViewEvent()
@@ -93,6 +94,7 @@ internal class MapViewModel(
             is MapViewEvent.CameraApplied -> cameraApplied(event.requestId)
             is MapViewEvent.CameraSettled -> updateState { it.copy(camera = event.camera) }
             MapViewEvent.LocateRequested -> locateRequested()
+            MapViewEvent.ScreenResumed -> recheckLocationAccess()
             MapViewEvent.ScreenLeft -> screenLeft()
             MapViewEvent.PreviewClosed -> previewClosed()
             MapViewEvent.DetailsRequested -> detailsRequested()
@@ -194,6 +196,15 @@ internal class MapViewModel(
                 }
                 else -> updateState { it.copy(devicePosition = null, isLocating = false, locationProblem = result) }
             }
+        }
+    }
+
+    private fun recheckLocationAccess() {
+        if (viewState.value.devicePosition == null) return
+        val problem = location.accessProblem() ?: return
+        locationJob?.cancel()
+        updateState {
+            it.copy(devicePosition = null, isLocating = false, locationProblem = problem, cameraCommand = null)
         }
     }
 

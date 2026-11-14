@@ -200,6 +200,32 @@ class MapViewModelTest {
         assertEquals(command.camera, model.viewState.value.camera)
     }
 
+    @Test
+    fun returningWithLocationDisabledClearsOldMarkerWithoutLocatingAgain() = mapTest {
+        var accessProblem: DeviceLocationResult? = null
+        var locationCalls = 0
+        val location = object : DeviceLocation {
+            override fun accessProblem() = accessProblem
+            override suspend fun locate(): DeviceLocationResult {
+                locationCalls++
+                return DeviceLocationResult.Located(pointA.position)
+            }
+        }
+        val model = model(ControlledPoints(), location)
+        model.handleEvent(MapViewEvent.LocateRequested)
+        runCurrent()
+        val command = assertNotNull(model.viewState.value.cameraCommand)
+        model.handleEvent(MapViewEvent.CameraApplied(command.requestId))
+
+        accessProblem = DeviceLocationResult.Disabled
+        model.handleEvent(MapViewEvent.ScreenResumed)
+        assertNull(model.viewState.value.devicePosition)
+        assertEquals(DeviceLocationResult.Disabled, model.viewState.value.locationProblem)
+        assertEquals(command.camera, model.viewState.value.camera)
+        assertNull(model.viewState.value.cameraCommand)
+        assertEquals(1, locationCalls)
+    }
+
     private fun mapTest(block: suspend TestScope.() -> Unit) = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
