@@ -49,6 +49,10 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.androidx.navigation.compose)
             implementation(libs.kotlinx.serialization.core)
+            implementation(libs.kotlinx.serialization.json)
+        }
+        androidMain.dependencies {
+            implementation(libs.okhttp)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
