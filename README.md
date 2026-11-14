@@ -74,9 +74,10 @@ encrypted session storage, restart verification, refresh and logout. The
   the simulator. The scheme can set `ROY_API_ORIGIN` to the configured API
   origin. Kotlin compilation passed for both iOS targets on Windows. SwiftUI
   linking, simulator tests, launch and Keychain require macOS with Xcode.
-- The tested backend returns the session ID in the refresh response's
-  `user.id`. The client verifies the account through `/me` before persisting a
-  mismatched snapshot. [Backend issue](../backlog/backend/refresh-account-identity.md).
+- Refresh returns the account ID in `user.id`, consistent with login,
+  registration and `/me`. The client rejects a rotated pair if the response
+  identifies a different account.
+  [Regression and local acceptance](../backlog/backend/refresh-account-identity.md).
 
 Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and options:
 
