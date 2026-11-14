@@ -1,0 +1,24 @@
+<resources>
+    <string name="map_loading">Загружаем точки</string>
+    <string name="map_empty">На этом участке пока нет точек</string>
+    <string name="map_filter_empty">На этом участке нет точек по выбранным фильтрам</string>
+    <string name="map_basemap_failed">Не удалось загрузить подложку карты</string>
+    <string name="map_offline">Не удалось подключиться к сети.</string>
+    <string name="map_api_failed">Не удалось загрузить данные о точках</string>
+    <string name="map_location_denied">Разрешение на геопозицию отклонено. Карта остаётся доступной.</string>
+    <string name="map_location_restricted">Разрешите доступ к геопозиции в настройках устройства</string>
+    <string name="map_location_disabled">Включите геопозицию в настройках устройства</string>
+    <string name="map_location_unavailable">Не удалось определить местоположение</string>
+    <string name="map_point_gone">Эта точка больше недоступна</string>
+    <string name="map_detail_loading">Загружаем точку</string>
+    <string name="map_details">Подробнее</string>
+    <string name="map_close">Закрыть</string>
+    <string name="map_reset_filter">Сбросить фильтр</string>
+    <string name="map_retry">Повторить</string>
+    <plurals name="map_people">
+        <item quantity="one">%1$d человек</item>
+        <item quantity="few">%1$d человека</item>
+        <item quantity="many">%1$d человек</item>
+        <item quantity="other">%1$d человек</item>
+    </plurals>
+</resources>
