@@ -100,40 +100,6 @@ class SessionRefreshTest {
     }
 
     @Test
-    fun refreshOfUnverifiedRotationUsesTheRetainedNewTokenAfterItsAccessExpires() = runTest {
-        val repository = SessionTestRepository()
-        val store = SessionTestStore()
-        val coordinator = SessionCoordinator(repository, store)
-        coordinator.restore()
-        coordinator.authenticate(AuthCredentials.Login("+123", "fixture"))
-        val original = repository.first
-        val wrong = AuthUser("session-id", "Анна", null, "+123", 21, null, original.expiresAt)
-        val retained = repository.rotated(wrong)
-        val latest = AuthSession("latest-access", original.expiresAt, "latest-refresh", original.refreshExpiresAt, wrong)
-        val rotationInputs = mutableListOf<String>()
-        var newestRead = false
-        repository.rotation = { refresh ->
-            rotationInputs.add(refresh)
-            AuthResult.Success(if (refresh == original.refreshToken) retained else latest)
-        }
-        repository.profile = { token ->
-            when (token) {
-                latest.accessToken -> AuthResult.Success(repository.user)
-                retained.accessToken -> if (newestRead) denied() else AuthResult.Failure(AuthError(AuthErrorCode.Network))
-                else -> denied()
-            }
-        }
-
-        assertEquals(AuthErrorCode.Network, assertIs<AuthResult.Failure>(coordinator.currentUser()).error.code)
-        newestRead = true
-        assertIs<AuthResult.Success<AuthUser>>(coordinator.currentUser())
-
-        assertEquals(listOf(original.refreshToken, retained.refreshToken), rotationInputs)
-        assertEquals(latest.refreshToken, store.saved?.refreshToken)
-        assertEquals(repository.user.id, store.saved?.user?.id)
-    }
-
-    @Test
     fun failedStorageRetriesTheAlreadyRotatedPairWithoutSendingTheOldTokenAgain() = runTest {
         val repository = SessionTestRepository()
         val store = SessionTestStore()
@@ -187,23 +153,27 @@ class SessionRefreshTest {
     }
 
     @Test
-    fun inconsistentRefreshPayloadUsesTheProtectedAccountIdentity() = runTest {
+    fun mismatchedRefreshAccountKeepsTheSavedPairWithoutAnExtraRead() = runTest {
         val repository = SessionTestRepository()
         val store = SessionTestStore()
         val coordinator = SessionCoordinator(repository, store)
         coordinator.restore()
         coordinator.authenticate(AuthCredentials.Login("+123", "fixture"))
         val first = repository.first
-        val wrong = AuthUser("fixture-session-id", "Анна", null, "+123", 21, null, first.expiresAt)
+        val wrong = AuthUser("different-account-id", "Анна", null, "+123", 21, null, first.expiresAt)
         val rotated = repository.rotated(wrong)
         repository.profile = { token ->
             if (token == rotated.accessToken) AuthResult.Success(repository.user) else denied()
         }
         repository.rotation = { AuthResult.Success(rotated) }
+        store.beforeWrite = { error("A mismatched pair must never be written") }
 
-        assertIs<AuthResult.Success<AuthUser>>(coordinator.currentUser())
-        assertEquals(repository.user.id, store.saved?.user?.id)
-        assertEquals(rotated.refreshToken, store.saved?.refreshToken)
+        val failure = assertIs<AuthResult.Failure>(coordinator.currentUser())
+
+        assertEquals(AuthErrorCode.UnexpectedResponse, failure.error.code)
+        assertEquals(1, repository.profileReads)
+        assertSame(first, store.saved)
+        assertIs<SessionStatus.Active>(coordinator.state.value)
     }
 }
 

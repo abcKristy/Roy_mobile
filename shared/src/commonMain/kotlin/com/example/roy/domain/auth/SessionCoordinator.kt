@@ -32,7 +32,6 @@ internal class SessionCoordinator(
     private var readWave = ReadWave()
     private var inFlight: CompletableDeferred<AuthResult<AuthSession>>? = null
     private var uncommitted: AuthSession? = null
-    private var unconfirmed: AuthSession? = null
 
     val state = status.asStateFlow()
 
@@ -62,7 +61,7 @@ internal class SessionCoordinator(
                     status.value = SessionStatus.VerificationUnavailable
                     return@withLock
                 }
-                // The rotation path already committed the verified snapshot.
+                // The rotation path already committed the rotated snapshot.
                 val savedProfile = if (current !== saved) AuthResult.Success(current) else persist(current.withUser(result.value))
                 if (savedProfile is AuthResult.Success) {
                     status.value = SessionStatus.Active(scopeId)
@@ -177,7 +176,6 @@ internal class SessionCoordinator(
                     if (scopeId != observedScope || current !== observed) return@withLock expired()
                     when (result) {
                         is AuthResult.Success -> {
-                            unconfirmed = null
                             uncommitted = result.value
                             persist(result.value).also { if (it is AuthResult.Success) uncommitted = null }
                         }
@@ -205,38 +203,12 @@ internal class SessionCoordinator(
     private suspend fun rotate(observed: AuthSession): AuthResult<AuthSession> {
         val pending = gate.withLock { uncommitted }
         if (pending != null) return AuthResult.Success(pending)
-        val unverified = gate.withLock { unconfirmed }
-        if (unverified != null) {
-            val previousCheck = verifyIdentity(unverified, observed)
-            if (!previousCheck.isTerminalAccess()) return previousCheck
+        val result = repository.refresh(observed.refreshToken)
+        if (result is AuthResult.Success && result.value.user.id != observed.user.id) {
+            return AuthResult.Failure(AuthError(AuthErrorCode.UnexpectedResponse))
         }
-        return when (val result = repository.refresh(unverified?.refreshToken ?: observed.refreshToken)) {
-            is AuthResult.Failure -> result
-            is AuthResult.Success -> {
-                val rotated = result.value
-                if (rotated.user.id == observed.user.id) return result
-                val verified = verifyIdentity(rotated, observed)
-                if (verified is AuthResult.Failure) {
-                    // Preserve the rotated pair for the next explicit verification or refresh.
-                    gate.withLock { if (session === observed) unconfirmed = rotated }
-                    if (verified.isTerminalAccess()) {
-                        return AuthResult.Failure(AuthError(AuthErrorCode.UnexpectedResponse))
-                    }
-                }
-                verified
-            }
-        }
+        return result
     }
-
-    private suspend fun verifyIdentity(rotated: AuthSession, observed: AuthSession): AuthResult<AuthSession> =
-        when (val profile = repository.currentUser(rotated.accessToken)) {
-            is AuthResult.Success -> if (profile.value.id == observed.user.id) {
-                AuthResult.Success(rotated.withUser(profile.value))
-            } else {
-                AuthResult.Failure(AuthError(AuthErrorCode.UnexpectedResponse))
-            }
-            is AuthResult.Failure -> profile
-        }
 
     private class ReadWave {
         var result: CompletableDeferred<AuthResult<AuthSession>>? = null
@@ -258,7 +230,6 @@ internal class SessionCoordinator(
         session = null
         readWave = ReadWave()
         uncommitted = null
-        unconfirmed = null
         scopeId++
         try {
             store.clear()
