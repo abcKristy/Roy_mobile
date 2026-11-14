@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDisplayName</key>
 	<string>Рой</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Рой использует вашу геопозицию, чтобы показать, где вы на карте.</string>
 	<key>UIRequiresFullScreen</key>
 	<true/>
 </dict>
