@@ -51,9 +51,11 @@ kotlin {
             implementation(libs.androidx.navigation.compose)
             implementation(libs.kotlinx.serialization.core)
             implementation(libs.kotlinx.serialization.json)
+            implementation(libs.maplibre.compose)
         }
         androidMain.dependencies {
             implementation(libs.okhttp)
+            runtimeOnly(libs.maplibre.runtime.opengl)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
