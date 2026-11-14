@@ -10,6 +10,7 @@ internal class AuthHttpRequest(
     val url: String,
     val body: String?,
     val accessToken: String?,
+    val maxResponseBytes: Int = MaxAuthResponseBytes,
 )
 
 internal class AuthHttpResponse(val status: Int, val body: String)
