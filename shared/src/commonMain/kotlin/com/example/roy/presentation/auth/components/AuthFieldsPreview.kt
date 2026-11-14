@@ -32,6 +32,8 @@ private fun AuthFieldsPreviewContent() {
     var password by remember { mutableStateOf("demo-password") }
     var isPasswordVisible by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("Анна") }
+    var age by remember { mutableStateOf("11") }
+    var hasConsent by remember { mutableStateOf(false) }
     val spacing = RoyTheme.dimensions.spacing
 
     Column(
@@ -73,6 +75,38 @@ private fun AuthFieldsPreviewContent() {
                     onToggle = { isPasswordVisible = !isPasswordVisible },
                 )
             },
+        )
+        AgeField(
+            ageText = age,
+            label = "Возраст",
+            errorText = "Укажите возраст от 12 лет",
+            isEnabled = true,
+            imeAction = ImeAction.Done,
+            onValueChange = { age = it },
+            onImeAction = {},
+        )
+        ConsentCheckbox(
+            isChecked = hasConsent,
+            isEnabled = true,
+            policyVersion = "preview",
+            label = "Согласие с политикой конфиденциальности",
+            onCheckedChange = { hasConsent = it },
+        )
+        PolicyLink(
+            url = null,
+            isLoading = false,
+            isEnabled = true,
+            policyLabel = "Политика конфиденциальности",
+            loadingLabel = "Загружаем политику",
+            retryLabel = "Политика недоступна. Повторить",
+            onOpen = {},
+            onRetry = {},
+        )
+        AuthSubmitButton(
+            text = "Создать профиль",
+            isEnabled = false,
+            isSubmitting = true,
+            onSubmit = {},
         )
     }
 }
