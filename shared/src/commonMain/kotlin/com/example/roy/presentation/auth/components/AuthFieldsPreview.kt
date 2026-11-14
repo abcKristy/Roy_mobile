@@ -32,6 +32,7 @@ private fun AuthFieldsPreviewContent() {
     var password by remember { mutableStateOf("demo-password") }
     var isPasswordVisible by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("Анна") }
+    var age by remember { mutableStateOf("11") }
     val spacing = RoyTheme.dimensions.spacing
 
     Column(
@@ -73,6 +74,15 @@ private fun AuthFieldsPreviewContent() {
                     onToggle = { isPasswordVisible = !isPasswordVisible },
                 )
             },
+        )
+        AgeField(
+            ageText = age,
+            label = "Возраст",
+            errorText = "Укажите возраст от 12 лет",
+            isEnabled = true,
+            imeAction = ImeAction.Done,
+            onValueChange = { age = it },
+            onImeAction = {},
         )
     }
 }
