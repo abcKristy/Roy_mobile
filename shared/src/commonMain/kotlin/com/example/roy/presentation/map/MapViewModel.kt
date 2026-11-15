@@ -21,6 +21,7 @@ internal val MoscowCamera = MapCamera(Position(latitude = 55.751244, longitude =
 
 internal data class MapViewState(
     val camera: MapCamera = MoscowCamera,
+    val createPosition: Position? = null,
     val cameraCommand: MapCameraCommand? = null,
     val devicePosition: Position? = null,
     val isLocating: Boolean = false,
@@ -51,6 +52,7 @@ internal sealed class MapViewEvent {
     data class FilterChanged(val filter: PointFilter) : MapViewEvent()
     data class PinSelected(val pointId: String) : MapViewEvent()
     data class MapTapped(val position: Position) : MapViewEvent()
+    data object CreateRequested : MapViewEvent()
     data class RenderingChanged(val status: MapRenderStatus) : MapViewEvent()
     data class CameraApplied(val requestId: Long) : MapViewEvent()
     data class CameraSettled(val camera: MapCamera) : MapViewEvent()
@@ -66,7 +68,7 @@ internal sealed class MapViewEvent {
 
 internal sealed class MapViewAction {
     data class OpenDetails(val pointId: String) : MapViewAction()
-    data class PositionTapped(val position: Position) : MapViewAction()
+    data class OpenCreate(val position: Position) : MapViewAction()
     data object PointGone : MapViewAction()
 }
 
@@ -88,11 +90,17 @@ internal class MapViewModel(
         when (event) {
             is MapViewEvent.ViewportChanged -> viewportChanged(event.bounds)
             is MapViewEvent.FilterChanged -> filterChanged(event.filter)
-            is MapViewEvent.PinSelected -> pinSelected(event.pointId)
+            is MapViewEvent.PinSelected -> {
+                updateState { it.copy(createPosition = null) }
+                pinSelected(event.pointId)
+            }
             is MapViewEvent.MapTapped -> mapTapped(event.position)
+            MapViewEvent.CreateRequested -> createRequested()
             is MapViewEvent.RenderingChanged -> updateState { it.copy(renderStatus = event.status) }
             is MapViewEvent.CameraApplied -> cameraApplied(event.requestId)
-            is MapViewEvent.CameraSettled -> updateState { it.copy(camera = event.camera) }
+            is MapViewEvent.CameraSettled -> updateState {
+                if (it.camera == event.camera) it else it.copy(camera = event.camera, createPosition = null)
+            }
             MapViewEvent.LocateRequested -> locateRequested()
             MapViewEvent.ScreenResumed -> recheckLocationAccess()
             MapViewEvent.ScreenLeft -> screenLeft()
@@ -169,7 +177,12 @@ internal class MapViewModel(
 
     private fun mapTapped(position: Position) {
         previewClosed()
-        viewModelScope.launch { sendAction(MapViewAction.PositionTapped(position)) }
+        updateState { it.copy(createPosition = position) }
+    }
+
+    private fun createRequested() {
+        val state = viewState.value
+        viewModelScope.launch { sendAction(MapViewAction.OpenCreate(state.createPosition ?: state.camera.center)) }
     }
 
     private fun detailsRequested() {

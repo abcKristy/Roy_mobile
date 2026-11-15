@@ -1,11 +1,14 @@
 package com.example.roy.presentation.auth
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.lifecycle.Lifecycle
@@ -23,6 +26,7 @@ import com.example.roy.domain.auth.AuthFieldError
 import com.example.roy.domain.auth.AuthMode
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.ValidateAuthInput
+import com.example.roy.presentation.components.TertiaryButton
 import com.example.roy.presentation.core.CollectMviActions
 import com.example.roy.presentation.navigation.RoyRoute
 import org.jetbrains.compose.resources.StringResource
@@ -30,18 +34,22 @@ import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.*
 
 @Composable
-internal fun AuthNavHost(session: SessionCoordinator) {
+internal fun AuthNavHost(
+    session: SessionCoordinator,
+    onCancel: (() -> Unit)? = null,
+    onSucceeded: () -> Unit = {},
+) {
     val nav = rememberNavController()
     NavHost(nav, startDestination = RoyRoute.Login) {
         composable<RoyRoute.Login> {
-            AuthScreen(AuthMode.Login, session) {
+            AuthScreen(AuthMode.Login, session, onCancel, onSucceeded) {
                 if (nav.currentDestination?.hasRoute<RoyRoute.Login>() == true) {
                     nav.navigate(RoyRoute.Register) { launchSingleTop = true }
                 }
             }
         }
         composable<RoyRoute.Register> {
-            AuthScreen(AuthMode.Register, session) {
+            AuthScreen(AuthMode.Register, session, onCancel, onSucceeded) {
                 if (nav.currentDestination?.hasRoute<RoyRoute.Register>() == true) {
                     nav.popBackStack<RoyRoute.Login>(inclusive = false)
                 }
@@ -51,9 +59,17 @@ internal fun AuthNavHost(session: SessionCoordinator) {
 }
 
 @Composable
-private fun AuthScreen(mode: AuthMode, session: SessionCoordinator, onSwitchMode: () -> Unit) {
+@OptIn(ExperimentalComposeUiApi::class)
+private fun AuthScreen(
+    mode: AuthMode,
+    session: SessionCoordinator,
+    onCancel: (() -> Unit)?,
+    onSucceeded: () -> Unit,
+    onSwitchMode: () -> Unit,
+) {
     val model = viewModel { AuthViewModel(mode, session, ValidateAuthInput()) }
     val state by model.viewState.collectAsStateWithLifecycle()
+    if (onCancel != null) BackHandler(enabled = !state.submitting, onBack = onCancel)
     SuppressBackWhileSubmitting(state.submitting)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var modeSwitchRequested by remember { mutableStateOf(false) }
@@ -81,6 +97,7 @@ private fun AuthScreen(mode: AuthMode, session: SessionCoordinator, onSwitchMode
                 password = ""
                 onSwitchMode()
             }
+            AuthViewAction.Succeeded -> onSucceeded()
             is AuthViewAction.OpenPolicy -> {
                 policyOpenFailed = try {
                     uriHandler.openUri(action.url)
@@ -110,7 +127,18 @@ private fun AuthScreen(mode: AuthMode, session: SessionCoordinator, onSwitchMode
         state.remoteFieldError != null -> null
         else -> state.formError?.let { stringResource(it.resource()) }
     }
-    AuthView(state, errors, formError, password, eventHandler)
+    if (onCancel == null) {
+        AuthView(state, errors, formError, password, eventHandler)
+    } else {
+        Column(Modifier.fillMaxSize()) {
+            TertiaryButton(
+                label = stringResource(Res.string.protected_cancel),
+                onClick = onCancel,
+                isEnabled = !state.submitting,
+            )
+            AuthView(state, errors, formError, password, eventHandler)
+        }
+    }
 }
 
 @Suppress("DEPRECATION")

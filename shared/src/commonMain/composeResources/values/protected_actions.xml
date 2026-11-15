@@ -1,0 +1,16 @@
+<resources>
+    <string name="protected_create">Создать точку</string>
+    <string name="protected_open_chat">Открыть чат</string>
+    <string name="protected_open_topic">Открыть чат «%1$s»</string>
+    <string name="protected_cancel">Отмена</string>
+    <string name="protected_back">Назад</string>
+    <string name="protected_loading">Проверяем доступ…</string>
+    <string name="protected_forbidden">Нет доступа к чату</string>
+    <string name="protected_unavailable">Не удалось проверить доступ</string>
+    <string name="protected_draft">Черновик точки</string>
+    <string name="protected_coordinates">Координаты: %1$s, %2$s</string>
+    <string name="protected_quota">Осталось точек: %1$d на неделю, %2$d на месяц</string>
+    <string name="protected_nearby">Точки поблизости</string>
+    <string name="protected_draft_prepared">Координаты готовы для передачи в форму создания.</string>
+    <string name="protected_topic_prepared">Членство подтверждено. Чат станет доступен после подключения экрана чата.</string>
+</resources>
