@@ -135,6 +135,26 @@ internal class SessionCoordinator(
         }
     }
 
+    /** Dispatches a user-initiated write once. Refresh may prepare the next explicit attempt. */
+    suspend fun <T> mutateProtected(
+        expectedScopeId: Long,
+        mutate: suspend (String) -> AuthResult<T>,
+    ): AuthResult<T> {
+        val (observed, wave) = gate.withLock {
+            if (status.value != SessionStatus.Active(expectedScopeId)) return expired()
+            val current = session?.takeUnless { closing } ?: return expired()
+            if (readWave.result?.isCompleted == true) readWave = ReadWave()
+            current to readWave
+        }
+        val result = mutate(observed.accessToken)
+        if (gate.withLock { scopeId != expectedScopeId || closing }) return expired()
+        if (!result.isTerminalAccess()) return result
+        return when (val refreshed = refresh(observed, expectedScopeId, wave)) {
+            is AuthResult.Success -> result
+            is AuthResult.Failure -> refreshed
+        }
+    }
+
     suspend fun logout(): AuthResult<Unit> = logoutGate.withLock {
         val closingScope = gate.withLock {
             if (session == null) return AuthResult.Success(Unit)

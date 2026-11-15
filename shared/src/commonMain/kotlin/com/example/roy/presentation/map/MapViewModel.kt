@@ -8,6 +8,7 @@ import com.example.roy.domain.map.LoadViewport
 import com.example.roy.domain.map.Point
 import com.example.roy.domain.map.PointError
 import com.example.roy.domain.map.PointFilter
+import com.example.roy.domain.map.PointFilterStore
 import com.example.roy.domain.map.LoadPoint
 import com.example.roy.domain.map.PointResult
 import com.example.roy.domain.map.Position
@@ -27,6 +28,7 @@ internal data class MapViewState(
     val isLocating: Boolean = false,
     val locationProblem: DeviceLocationResult? = null,
     val query: ViewportQuery? = null,
+    val appliedFilter: PointFilter = PointFilter(),
     val viewport: ViewportContent = ViewportContent.Loading,
     val points: List<Point> = emptyList(),
     val selectedPointId: String? = null,
@@ -49,7 +51,9 @@ internal sealed interface PointPreview {
 
 internal sealed class MapViewEvent {
     data class ViewportChanged(val bounds: BoundingBox) : MapViewEvent()
+    data object OpenFilters : MapViewEvent()
     data class FilterChanged(val filter: PointFilter) : MapViewEvent()
+    data class PointChanged(val pointId: String, val isGone: Boolean) : MapViewEvent()
     data class PinSelected(val pointId: String) : MapViewEvent()
     data class MapTapped(val position: Position) : MapViewEvent()
     data object CreateRequested : MapViewEvent()
@@ -68,6 +72,7 @@ internal sealed class MapViewEvent {
 }
 
 internal sealed class MapViewAction {
+    data object OpenFilters : MapViewAction()
     data class OpenDetails(val pointId: String) : MapViewAction()
     data class OpenCreate(val position: Position) : MapViewAction()
     data object PointGone : MapViewAction()
@@ -77,8 +82,10 @@ internal class MapViewModel(
     private val loadViewport: LoadViewport,
     private val loadPoint: LoadPoint,
     private val location: DeviceLocation,
-) : BaseViewModel<MapViewState, MapViewEvent, MapViewAction>(MapViewState()) {
-    private var filter = PointFilter()
+    private val filterStore: PointFilterStore? = null,
+) : BaseViewModel<MapViewState, MapViewEvent, MapViewAction>(
+    MapViewState(appliedFilter = filterStore?.read() ?: PointFilter()),
+) {
     private var viewportGeneration = 0L
     private var detailGeneration = 0L
     private var cameraGeneration = 0L
@@ -92,7 +99,9 @@ internal class MapViewModel(
     override fun handleEvent(event: MapViewEvent) {
         when (event) {
             is MapViewEvent.ViewportChanged -> viewportChanged(event.bounds)
+            MapViewEvent.OpenFilters -> viewModelScope.launch { sendAction(MapViewAction.OpenFilters) }
             is MapViewEvent.FilterChanged -> filterChanged(event.filter)
+            is MapViewEvent.PointChanged -> pointChanged(event.pointId, event.isGone)
             is MapViewEvent.PinSelected -> {
                 updateState { it.copy(createPosition = null) }
                 pinSelected(event.pointId)
@@ -122,14 +131,16 @@ internal class MapViewModel(
     }
 
     private fun viewportChanged(bounds: BoundingBox) {
-        val query = ViewportQuery(bounds, filter)
+        val query = ViewportQuery(bounds, viewState.value.appliedFilter)
         if (query != viewState.value.query) requestViewport(query)
     }
 
     private fun filterChanged(newFilter: PointFilter) {
-        if (filter == newFilter) return
-        filter = newFilter
-        viewState.value.query?.let { requestViewport(it.copy(filter = filter)) }
+        if (viewState.value.appliedFilter == newFilter) return
+        filterStore?.save(newFilter)
+        previewClosed()
+        updateState { it.copy(appliedFilter = newFilter, points = emptyList()) }
+        viewState.value.query?.let { requestViewport(it.copy(filter = newFilter)) }
     }
 
     private fun requestViewport(query: ViewportQuery) {
@@ -146,6 +157,16 @@ internal class MapViewModel(
                 }
             }
         }
+    }
+
+    private fun pointChanged(pointId: String, isGone: Boolean) {
+        if (isGone) {
+            if (viewState.value.selectedPointId == pointId) previewClosed()
+            updateState { state -> state.copy(points = state.points.filterNot { it.id == pointId }) }
+        } else if (viewState.value.selectedPointId == pointId) {
+            requestPoint(pointId)
+        }
+        viewState.value.query?.let(::requestViewport)
     }
 
     private fun pinSelected(pointId: String) {

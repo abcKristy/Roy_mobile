@@ -2,6 +2,10 @@ package com.example.roy.presentation.navigation
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -10,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
@@ -19,6 +25,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.toRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.dialog
 import com.example.roy.presentation.components.feedback.EmptyCourtyardIllustration
 import com.example.roy.presentation.components.feedback.EmptyState
 import com.example.roy.presentation.components.feedback.EmptyStateAction
@@ -57,24 +64,46 @@ internal fun RoyNavHost(
     navController: NavHostController,
     profile: @Composable () -> Unit,
     map: @Composable () -> Unit,
-    pointDetails: @Composable (String) -> Unit,
+    mapFilters: @Composable () -> Unit,
+    pointDetails: @Composable (RoyRoute.PointDetails) -> Unit,
+    topicChat: @Composable (RoyRoute.TopicChat) -> Unit,
     protectedAuth: @Composable (Long) -> Unit,
     protectedTarget: @Composable () -> Unit,
     onOpenMap: () -> Unit,
 ) {
     val latestProfile by rememberUpdatedState(profile)
     val latestMap by rememberUpdatedState(map)
+    val latestMapFilters by rememberUpdatedState(mapFilters)
     val latestPointDetails by rememberUpdatedState(pointDetails)
+    val latestTopicChat by rememberUpdatedState(topicChat)
     val latestAuth by rememberUpdatedState(protectedAuth)
     val latestTarget by rememberUpdatedState(protectedTarget)
     val latestOpenMap by rememberUpdatedState(onOpenMap)
     NavHost(navController = navController, startDestination = RoyRoute.Map, modifier = Modifier.fillMaxSize()) {
         composable<RoyRoute.Map> { latestMap() }
+        composable<RoyRoute.MapFilters> { latestMapFilters() }
         composable<RoyRoute.PointDetails> { entry ->
-            latestPointDetails(entry.toRoute<RoyRoute.PointDetails>().pointId)
+            latestPointDetails(entry.toRoute<RoyRoute.PointDetails>())
         }
+        composable<RoyRoute.TopicChat> { latestTopicChat(it.toRoute<RoyRoute.TopicChat>()) }
         composable<RoyRoute.ProtectedAuth> { latestAuth(it.toRoute<RoyRoute.ProtectedAuth>().flowId) }
-        composable<RoyRoute.ProtectedTarget> { latestTarget() }
+        dialog<RoyRoute.ProtectedTarget>(
+            dialogProperties = DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+                usePlatformDefaultWidth = false,
+            ),
+        ) {
+            val radius = RoyTheme.dimensions.radii.dialog
+            Box(Modifier.fillMaxSize().navigationBarsPadding(), contentAlignment = Alignment.BottomCenter) {
+                Box(
+                    Modifier.widthIn(max = 560.dp).fillMaxWidth().fillMaxHeight(0.94f)
+                        .clip(RoundedCornerShape(topStart = radius, topEnd = radius)),
+                ) {
+                    latestTarget()
+                }
+            }
+        }
         composable<RoyRoute.Profile> { latestProfile() }
         composable<RoyRoute.Chats> {
             Box(

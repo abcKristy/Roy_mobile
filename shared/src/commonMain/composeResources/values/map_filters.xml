@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="map_filter_title">Фильтры карты</string>
+    <string name="map_filter_active">Фильтр активен</string>
+    <string name="map_filter_inactive">Фильтр выключен</string>
+    <string name="map_filter_people">Участники темы</string>
+    <string name="map_filter_min">От</string>
+    <string name="map_filter_max">До</string>
+    <string name="map_filter_range_error">Введите диапазон от 0 до 50. Нижняя граница не должна превышать верхнюю.</string>
+    <string name="map_filter_topic">Тема</string>
+    <string name="map_filter_any_topic">Любая тема</string>
+    <string name="map_filter_loading">Загружаем темы…</string>
+    <string name="map_filter_presets_failed">Не удалось загрузить темы</string>
+    <string name="map_filter_custom">Название темы, если нужно</string>
+    <string name="map_filter_label_error">Название темы должно содержать до 40 символов</string>
+    <string name="map_filter_apply">Применить</string>
+</resources>

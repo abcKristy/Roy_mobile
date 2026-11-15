@@ -23,7 +23,13 @@ internal class AndroidAuthHttpTransport : AuthHttpTransport {
         suspendCancellableCoroutine { continuation ->
             val wireRequest = Request.Builder().url(request.url).header("Accept", "application/json")
             request.accessToken?.let { wireRequest.header("Authorization", "Bearer $it") }
-            if (request.method == AuthHttpMethod.Post) wireRequest.post(OneShotAuthBody(request.body))
+            request.headers.forEach { (name, value) -> wireRequest.header(name, value) }
+            when (request.method) {
+                AuthHttpMethod.Get -> wireRequest.get()
+                AuthHttpMethod.Post -> wireRequest.post(OneShotAuthBody(request.body))
+                AuthHttpMethod.Put -> wireRequest.put(OneShotAuthBody(request.body))
+                AuthHttpMethod.Delete -> wireRequest.delete(OneShotAuthBody(request.body))
+            }
 
             val call = client.newCall(wireRequest.build())
             continuation.invokeOnCancellation { call.cancel() }

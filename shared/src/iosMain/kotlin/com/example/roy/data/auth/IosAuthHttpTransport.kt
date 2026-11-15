@@ -35,9 +35,12 @@ internal class IosAuthHttpTransport : AuthHttpTransport {
         wireRequest.setHTTPMethod(when (request.method) {
             AuthHttpMethod.Get -> "GET"
             AuthHttpMethod.Post -> "POST"
+            AuthHttpMethod.Put -> "PUT"
+            AuthHttpMethod.Delete -> "DELETE"
         })
         wireRequest.setValue("application/json", forHTTPHeaderField = "Accept")
         request.accessToken?.let { wireRequest.setValue("Bearer $it", forHTTPHeaderField = "Authorization") }
+        request.headers.forEach { (name, value) -> wireRequest.setValue(value, forHTTPHeaderField = name) }
         request.body?.let {
             wireRequest.setValue("application/json", forHTTPHeaderField = "Content-Type")
             val bytes = it.encodeToByteArray()

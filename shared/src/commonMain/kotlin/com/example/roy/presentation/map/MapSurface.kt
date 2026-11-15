@@ -26,6 +26,7 @@ data class MapSurfaceState(
     val devicePosition: Position? = null,
     val onCameraApplied: (Long) -> Unit = {},
     val onCameraSettled: (MapCamera) -> Unit = {},
+    val createPosition: Position? = null,
 )
 
 data class MapCamera(

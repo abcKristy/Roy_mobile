@@ -21,10 +21,20 @@ import com.example.roy.domain.location.DeviceLocation
 import com.example.roy.domain.map.LoadPoint
 import com.example.roy.domain.map.LoadViewport
 import com.example.roy.domain.map.PointRepository
-import com.example.roy.domain.navigation.ResolveProtectedTarget
+import com.example.roy.domain.map.PointFilterStore
+import com.example.roy.domain.points.CreatePointRepository
+import com.example.roy.domain.points.CreatePointUseCase
+import com.example.roy.domain.points.PointDetailOperations
 import com.example.roy.presentation.auth.AuthNavHost
+import com.example.roy.presentation.filters.MapFilterScreen
+import com.example.roy.presentation.filters.MapFilterViewModel
 import com.example.roy.presentation.map.MapScreen
 import com.example.roy.presentation.map.MapViewModel
+import com.example.roy.presentation.map.MapViewEvent
+import com.example.roy.presentation.points.create.CreatePointScreen
+import com.example.roy.presentation.points.create.CreatePointViewModel
+import com.example.roy.presentation.points.detail.PointDetailScreen
+import com.example.roy.presentation.points.detail.PointDetailViewModel
 import com.example.roy.presentation.navigation.RoyRoute
 import com.example.roy.presentation.components.overlays.RoySnackbarHostState
 import com.example.roy.presentation.components.overlays.RoySnackbarMessage
@@ -33,8 +43,7 @@ import com.example.roy.presentation.navigation.MainTab
 import com.example.roy.presentation.navigation.AuthReturnCoordinator
 import com.example.roy.presentation.navigation.PendingProtectedIntent
 import com.example.roy.presentation.navigation.ProtectedNavigation
-import com.example.roy.presentation.navigation.ProtectedTargetScreen
-import com.example.roy.presentation.navigation.PublicPointTopicsScreen
+import com.example.roy.presentation.navigation.TopicChatHandoff
 import com.example.roy.presentation.navigation.RoyNavHost
 import com.example.roy.presentation.navigation.mainTab
 import com.example.roy.presentation.navigation.openTab
@@ -49,7 +58,9 @@ internal fun RoyRootScreen(
     location: DeviceLocation,
     sessionStatus: SessionStatus,
     continuation: AuthReturnCoordinator,
-    resolver: ResolveProtectedTarget,
+    createPoints: CreatePointRepository,
+    pointDetails: PointDetailOperations,
+    filterStore: PointFilterStore,
     guestProfile: (@Composable () -> Unit)? = null,
 ) {
     val owner = remember {
@@ -65,9 +76,24 @@ internal fun RoyRootScreen(
     val snackbar = remember { RoySnackbarHostState() }
     var snackbarMessageId by remember { mutableLongStateOf(0L) }
     val expiration by session.expiration.collectAsStateWithLifecycle()
-    val loadPoint = remember(points) { LoadPoint(points) }
+    val mapModel = viewModel(viewModelStoreOwner = owner) {
+        MapViewModel(LoadViewport(points), LoadPoint(points), location, filterStore)
+    }
     val goneMessage = stringResource(Res.string.map_point_gone)
     val eventHandler: (RoyRootViewEvent) -> Unit = remember(viewModel) { viewModel::handleEvent }
+
+    fun openPoint(route: RoyRoute.PointDetails) {
+        navController.navigate(route) {
+            popUpTo<RoyRoute.Map> { inclusive = false }
+        }
+    }
+
+    fun openChat(pointId: String, topicId: String, chatId: String) {
+        val active = session.state.value as? SessionStatus.Active ?: return
+        navController.navigate(RoyRoute.TopicChat(pointId, topicId, chatId, isMember = true, scopeId = active.scopeId)) {
+            launchSingleTop = true
+        }
+    }
 
     fun navigate(effect: ProtectedNavigation?) {
         when (effect) {
@@ -80,8 +106,14 @@ internal fun RoyRootScreen(
             }
             is ProtectedNavigation.Continue -> {
                 if ((session.state.value as? SessionStatus.Active)?.scopeId != effect.scopeId) return
-                continuation.showTarget(effect)
-                navController.navigate(RoyRoute.ProtectedTarget) { launchSingleTop = true }
+                when (val intent = effect.intent) {
+                    is PendingProtectedIntent.CreatePoint -> {
+                        continuation.showTarget(effect)
+                        navController.navigate(RoyRoute.ProtectedTarget) { launchSingleTop = true }
+                    }
+                    is PendingProtectedIntent.OpenTopic -> openPoint(RoyRoute.PointDetails(intent.pointId, intent.topicId))
+                    is PendingProtectedIntent.AddTopic -> openPoint(RoyRoute.PointDetails(intent.pointId, offerAddTopic = true))
+                }
             }
         }
     }
@@ -117,7 +149,9 @@ internal fun RoyRootScreen(
             is RoyRootViewAction.OpenTab -> {
                 val current = navController.currentDestination
                 if (current?.hasRoute<RoyRoute.ProtectedAuth>() != true &&
-                    current?.hasRoute<RoyRoute.ProtectedTarget>() != true
+                    current?.hasRoute<RoyRoute.ProtectedTarget>() != true &&
+                    current?.hasRoute<RoyRoute.MapFilters>() != true &&
+                    current?.hasRoute<RoyRoute.PointDetails>() != true
                 ) navController.openTab(action.tab)
             }
         }
@@ -128,7 +162,9 @@ internal fun RoyRootScreen(
         tabs = {
             val destination = backStackEntry?.destination
             if (destination?.hasRoute<RoyRoute.ProtectedAuth>() != true &&
-                destination?.hasRoute<RoyRoute.ProtectedTarget>() != true
+                destination?.hasRoute<RoyRoute.ProtectedTarget>() != true &&
+                destination?.hasRoute<RoyRoute.MapFilters>() != true &&
+                destination?.hasRoute<RoyRoute.PointDetails>() != true
             ) {
                 RoyRootView(
                     viewState = RoyRootViewState(destination.mainTab()),
@@ -147,7 +183,6 @@ internal fun RoyRootScreen(
                     }
                 },
                 map = {
-                    val mapModel = viewModel { MapViewModel(LoadViewport(points), loadPoint, location) }
                     MapScreen(
                         viewModel = mapModel,
                         snackbar = snackbar,
@@ -157,14 +192,81 @@ internal fun RoyRootScreen(
                                 navController.navigate(RoyRoute.PointDetails(pointId)) { launchSingleTop = true }
                             }
                         },
+                        onOpenFilters = {
+                            if (navController.currentDestination?.hasRoute<RoyRoute.Map>() == true) {
+                                navController.navigate(RoyRoute.MapFilters) { launchSingleTop = true }
+                            }
+                        },
                         onCreatePoint = {
                             navController.currentDestination?.hasRoute<RoyRoute.Map>() == true &&
                                 request(PendingProtectedIntent.CreatePoint(it))
                         },
                     )
                 },
-                pointDetails = {
-                    PublicPointTopicsScreen(it, loadPoint, { navController.popBackStack() }) { intent -> request(intent) }
+                mapFilters = {
+                    val filters = viewModel {
+                        MapFilterViewModel(mapModel.viewState.value.appliedFilter, createPoints::getPresets)
+                    }
+                    MapFilterScreen(
+                        viewModel = filters,
+                        onBack = {
+                            if (navController.currentDestination?.hasRoute<RoyRoute.MapFilters>() == true) {
+                                navController.popBackStack()
+                            }
+                        },
+                        onApplied = {
+                            if (navController.currentDestination?.hasRoute<RoyRoute.MapFilters>() == true) {
+                                mapModel.handleEvent(MapViewEvent.FilterChanged(it))
+                                navController.popBackStack()
+                            }
+                        },
+                    )
+                },
+                pointDetails = { route ->
+                    val scopeId = (sessionStatus as? SessionStatus.Active)?.scopeId
+                    val detailModel = viewModel(key = "detail/" + route.pointId + "/" + (scopeId ?: "guest")) {
+                        PointDetailViewModel(route.pointId, route.topicId, scopeId, route.offerAddTopic, pointDetails)
+                    }
+                    fun isCurrentDetail(): Boolean {
+                        val entry = navController.currentBackStackEntry
+                        return entry?.destination?.hasRoute<RoyRoute.PointDetails>() == true &&
+                            entry.toRoute<RoyRoute.PointDetails>() == route &&
+                            (session.state.value as? SessionStatus.Active)?.scopeId == scopeId
+                    }
+                    PointDetailScreen(
+                        viewModel = detailModel,
+                        onBack = { if (isCurrentDetail()) navController.popBackStack() },
+                        onRequireJoin = { pointId, topicId, _ ->
+                            if (isCurrentDetail()) request(PendingProtectedIntent.OpenTopic(pointId, topicId))
+                        },
+                        onRequireAddTopic = { if (isCurrentDetail()) request(PendingProtectedIntent.AddTopic(it)) },
+                        onOpenChat = { pointId, topicId, chatId ->
+                            if (isCurrentDetail()) openChat(pointId, topicId, chatId)
+                        },
+                        onPointChanged = { pointId, isGone ->
+                            mapModel.handleEvent(MapViewEvent.PointChanged(pointId, isGone))
+                            if (isGone) {
+                                if (isCurrentDetail() && (route.topicId != null || route.offerAddTopic)) {
+                                    navController.popBackStack<RoyRoute.Map>(inclusive = false)
+                                }
+                                snackbar.show(RoySnackbarMessage(++snackbarMessageId, goneMessage))
+                            }
+                        },
+                    )
+                },
+                topicChat = { route ->
+                    fun isCurrentChat(): Boolean {
+                        val entry = navController.currentBackStackEntry
+                        return entry?.destination?.hasRoute<RoyRoute.TopicChat>() == true &&
+                            entry.toRoute<RoyRoute.TopicChat>() == route
+                    }
+                    if (route.isMember && (sessionStatus as? SessionStatus.Active)?.scopeId == route.scopeId) {
+                        TopicChatHandoff { if (isCurrentChat()) navController.popBackStack() }
+                    } else {
+                        LaunchedEffect(route) {
+                            if (isCurrentChat()) navController.popBackStack<RoyRoute.Map>(inclusive = false)
+                        }
+                    }
                 },
                 protectedAuth = { flowId ->
                     if (continuation.isAuthOpen(flowId)) {
@@ -195,21 +297,35 @@ internal fun RoyRootScreen(
                 },
                 protectedTarget = {
                     val current = continuation.currentTarget
-                    if (current != null && (sessionStatus as? SessionStatus.Active)?.scopeId == current.scopeId) {
-                        ProtectedTargetScreen(
-                            current,
-                            resolver,
-                            onBack = {
+                    val intent = current?.intent as? PendingProtectedIntent.CreatePoint
+                    if (current != null && intent != null && (sessionStatus as? SessionStatus.Active)?.scopeId == current.scopeId) {
+                        val createModel = viewModel {
+                            CreatePointViewModel(intent.position, CreatePointUseCase(createPoints, session, current.scopeId))
+                        }
+                        CreatePointScreen(
+                            viewModel = createModel,
+                            onClose = {
                                 if (isCurrentTarget(current)) {
                                     continuation.clearTarget()
                                     navController.popBackStack()
                                 }
                             },
-                            onGone = {
-                                if (isCurrentTarget(current)) {
+                            onCreated = { destination ->
+                                if (isCurrentTarget(current) &&
+                                    (session.state.value as? SessionStatus.Active)?.scopeId == current.scopeId
+                                ) {
+                                    continuation.clearTarget()
+                                    mapModel.handleEvent(MapViewEvent.PointChanged(destination.pointId, isGone = false))
+                                    navController.popBackStack<RoyRoute.Map>(inclusive = false)
+                                    openChat(destination.pointId, destination.topicId, destination.chatId)
+                                }
+                            },
+                            onSessionExpired = {
+                                if ((session.state.value as? SessionStatus.Active)?.scopeId != current.scopeId &&
+                                    isCurrentTarget(current)
+                                ) {
                                     continuation.clearTarget()
                                     navController.popBackStack<RoyRoute.Map>(inclusive = false)
-                                    snackbar.show(RoySnackbarMessage(++snackbarMessageId, goneMessage))
                                 }
                             },
                         )

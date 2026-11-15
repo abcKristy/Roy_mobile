@@ -56,7 +56,7 @@ class MapViewModelTest {
     }
 
     @Test
-    fun secondPageFailureKeepsLastCompleteViewportAndRetryUsesCurrentFilter() = mapTest {
+    fun failedNewFilterDoesNotShowOldPinsAndRetryUsesCurrentFilter() = mapTest {
         val source = ControlledPoints()
         val model = model(source)
         model.handleEvent(MapViewEvent.ViewportChanged(boundsA))
@@ -76,7 +76,8 @@ class MapViewModelTest {
         second.reply.resume(PointResult.Failure(PointError.Network))
         runCurrent()
 
-        assertEquals(listOf(pointA), model.viewState.value.points)
+        assertTrue(model.viewState.value.points.isEmpty())
+        assertEquals(filter, model.viewState.value.appliedFilter)
         assertEquals(ViewportContent.Failed(PointError.Network), model.viewState.value.viewport)
         model.handleEvent(MapViewEvent.RetryViewport)
         runCurrent()

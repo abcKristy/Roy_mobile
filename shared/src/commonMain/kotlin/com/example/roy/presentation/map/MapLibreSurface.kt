@@ -1,5 +1,7 @@
 package com.example.roy.presentation.map
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +34,12 @@ import org.maplibre.compose.map.rememberMapState
 import org.maplibre.compose.style.BaseStyle
 import org.maplibre.compose.util.DelicateMaplibreComposeApi
 import org.maplibre.compose.util.VisibleBounds
+import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.stringResource
+import roy.shared.generated.resources.Res
+import roy.shared.generated.resources.map_create_location
+import roy.shared.generated.resources.map_selected
+import com.example.roy.presentation.theme.RoyTheme
 import org.maplibre.spatialk.geojson.Position as LibrePosition
 
 internal class MapLibreSurface(
@@ -117,6 +125,14 @@ internal class MapLibreSurface(
         MaplibreMap(modifier = modifier, state = map, interactions = interactions) {
             state.devicePosition?.let {
                 MapDeviceMarker(Modifier.placedAt(it.toLibrePosition()))
+            }
+            state.createPosition?.let {
+                Image(
+                    painter = painterResource(Res.drawable.map_selected),
+                    contentDescription = stringResource(Res.string.map_create_location),
+                    modifier = Modifier.placedAt(it.toLibrePosition(), Alignment.BottomCenter)
+                        .size(RoyTheme.dimensions.minimumTouchTarget),
+                )
             }
             state.markers.sortedBy { it.pointId == state.selectedPointId }.forEach { marker ->
                 key(marker.pointId) {

@@ -49,6 +49,7 @@ internal fun MapScreen(
     snackbar: RoySnackbarHostState,
     nextMessageId: () -> Long,
     onOpenDetails: (String) -> Unit,
+    onOpenFilters: () -> Unit,
     onCreatePoint: (Position) -> Boolean,
 ) {
     val state by viewModel.viewState.collectAsStateWithLifecycle()
@@ -77,6 +78,7 @@ internal fun MapScreen(
     }
     CollectMviActions(viewModel.viewAction) { action ->
         when (action) {
+            MapViewAction.OpenFilters -> onOpenFilters()
             is MapViewAction.OpenDetails -> onOpenDetails(action.pointId)
             is MapViewAction.OpenCreate -> {
                 if (!onCreatePoint(action.position)) eventHandler(MapViewEvent.CreateNavigationDeclined)
@@ -105,6 +107,7 @@ internal fun MapView(
                     initialCamera = viewState.camera,
                     cameraCommand = viewState.cameraCommand,
                     devicePosition = viewState.devicePosition,
+                    createPosition = viewState.createPosition,
                     selectedPointId = viewState.selectedPointId,
                     markers = markers,
                     onCameraApplied = { eventHandler(MapViewEvent.CameraApplied(it)) },
@@ -128,7 +131,9 @@ internal fun MapView(
                 verticalArrangement = Arrangement.spacedBy(spacing.extraSmall),
             ) {
                 TertiaryButton(
-                    label = stringResource(Res.string.protected_create),
+                    label = stringResource(
+                        if (viewState.createPosition == null) Res.string.protected_create else Res.string.map_create_here,
+                    ),
                     onClick = { eventHandler(MapViewEvent.CreateRequested) },
                 )
                 MapLocationButton(
@@ -136,6 +141,7 @@ internal fun MapView(
                     isEnabled = !viewState.isLocating,
                     onClick = { eventHandler(MapViewEvent.LocateRequested) },
                 )
+                MapFilterButton(viewState.appliedFilter.isActive) { eventHandler(MapViewEvent.OpenFilters) }
             }
             MapFeedback(viewState, eventHandler)
         }

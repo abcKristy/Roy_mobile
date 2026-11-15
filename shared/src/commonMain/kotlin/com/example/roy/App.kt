@@ -9,7 +9,9 @@ import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.SessionStatus
 import com.example.roy.domain.location.DeviceLocation
 import com.example.roy.domain.map.PointRepository
-import com.example.roy.domain.navigation.ResolveProtectedTarget
+import com.example.roy.domain.map.PointFilterStore
+import com.example.roy.domain.points.CreatePointRepository
+import com.example.roy.domain.points.PointDetailOperations
 import com.example.roy.presentation.components.feedback.ErrorState
 import com.example.roy.presentation.components.feedback.LoadingMode
 import com.example.roy.presentation.components.feedback.LoadingState
@@ -29,7 +31,9 @@ internal fun App(
     points: PointRepository,
     location: DeviceLocation,
     continuation: AuthReturnCoordinator,
-    resolver: ResolveProtectedTarget,
+    createPoints: CreatePointRepository,
+    pointDetails: PointDetailOperations,
+    filterStore: PointFilterStore,
 ) {
     val state by session.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -53,7 +57,7 @@ internal fun App(
                     )
                 }
             } else null
-            RoyRootScreen(session, points, location, current, continuation, resolver, guestProfile)
+            RoyRootScreen(session, points, location, current, continuation, createPoints, pointDetails, filterStore, guestProfile)
         }
     }
 }

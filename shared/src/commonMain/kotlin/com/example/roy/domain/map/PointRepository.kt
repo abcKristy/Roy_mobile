@@ -1,6 +1,7 @@
 package com.example.roy.domain.map
 
 import kotlin.time.Instant
+import kotlinx.serialization.Serializable
 
 internal data class Point(
     val id: String,
@@ -21,6 +22,7 @@ internal data class PointTopic(
     val chatId: String,
 )
 
+@Serializable
 internal data class PointFilter(
     val topicKey: String? = null,
     val customTopicLabel: String? = null,

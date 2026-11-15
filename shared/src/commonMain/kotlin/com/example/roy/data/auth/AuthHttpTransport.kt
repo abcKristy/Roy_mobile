@@ -3,6 +3,8 @@ package com.example.roy.data.auth
 internal enum class AuthHttpMethod {
     Get,
     Post,
+    Put,
+    Delete,
 }
 
 internal class AuthHttpRequest(
@@ -11,6 +13,7 @@ internal class AuthHttpRequest(
     val body: String?,
     val accessToken: String?,
     val maxResponseBytes: Int = MaxAuthResponseBytes,
+    val headers: Map<String, String> = emptyMap(),
 )
 
 internal class AuthHttpResponse(val status: Int, val body: String)

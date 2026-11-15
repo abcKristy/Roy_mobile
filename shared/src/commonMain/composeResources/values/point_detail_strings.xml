@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="point_detail_to_map">Вернуться на карту</string>
+    <string name="point_detail_empty">У этой точки пока нет тем</string>
+    <string name="point_detail_people">Участников: %1$d</string>
+    <string name="point_detail_description">Открытый сбор по теме «%1$s»</string>
+    <string name="point_detail_join">Вступить в тему</string>
+    <string name="point_detail_add">Добавить тему</string>
+    <string name="point_detail_leave">Выйти из чата</string>
+    <string name="point_detail_leave_title">Выйти из чата?</string>
+    <string name="point_detail_leave_body">Чтобы снова писать в этом чате, вступите в тему. Если в точке больше не останется участников, она исчезнет с карты.</string>
+    <string name="point_detail_cancel">Отмена</string>
+    <string name="point_detail_existing">Тема уже есть в точке</string>
+    <string name="point_detail_select_existing">Выбрать существующую тему</string>
+    <string name="point_detail_custom_label">Название темы</string>
+    <string name="point_detail_network">Проверьте подключение к сети и попробуйте ещё раз.</string>
+    <string name="point_detail_session">Войдите в аккаунт снова, чтобы продолжить.</string>
+    <string name="point_detail_duplicate">Такая тема уже существует. Обновите карточку точки.</string>
+    <string name="point_detail_invalid_topic">Введите название от 1 до 40 символов.</string>
+</resources>

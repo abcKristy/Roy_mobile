@@ -8,12 +8,16 @@ import com.example.roy.App
 import com.example.roy.data.auth.AndroidAuthHttpTransport
 import com.example.roy.data.auth.AndroidSessionStore
 import com.example.roy.data.auth.AuthRemoteDataSource
+import com.example.roy.data.filters.FilterPreferencesStore
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.data.points.PointRemoteDataSource
-import com.example.roy.data.points.ProtectedTargetRemoteDataSource
+import com.example.roy.data.points.CreatePointRemoteDataSource
+import com.example.roy.data.points.PointDetailRemoteDataSource
 import com.example.roy.domain.map.LoadPoint
 import com.example.roy.domain.map.PointRepository
-import com.example.roy.domain.navigation.ResolveProtectedTarget
+import com.example.roy.domain.map.PointFilterStore
+import com.example.roy.domain.points.CreatePointRepository
+import com.example.roy.domain.points.PointDetailOperations
 import com.example.roy.location.rememberAndroidDeviceLocation
 import com.example.roy.presentation.navigation.AuthReturnCoordinator
 
@@ -25,19 +29,34 @@ fun RoyAndroidApp(context: Context, origin: String?) {
         val repository = AuthRemoteDataSource(apiOrigin, transport)
         val session = SessionCoordinator(repository, AndroidSessionStore(context.applicationContext))
         val points = PointRemoteDataSource(apiOrigin, transport)
+        val createPoints = CreatePointRemoteDataSource(apiOrigin, transport)
+        val preferences = context.applicationContext.getSharedPreferences("roy_map", Context.MODE_PRIVATE)
+        val filterStore = FilterPreferencesStore(
+            readValue = { preferences.getString("point_filter", null) },
+            writeValue = { preferences.edit().putString("point_filter", it).apply() },
+        )
         AndroidAppModel(
             session,
             points,
-            ResolveProtectedTarget(LoadPoint(points), session, ProtectedTargetRemoteDataSource(apiOrigin, transport)),
+            createPoints,
+            filterStore,
+            PointDetailOperations(
+                LoadPoint(points), session, PointDetailRemoteDataSource(apiOrigin, transport), createPoints::getPresets,
+            ),
         )
     }
-    App(model.session, model.points, rememberAndroidDeviceLocation(context), model.continuation, model.resolver)
+    App(
+        model.session, model.points, rememberAndroidDeviceLocation(context), model.continuation,
+        model.createPoints, model.pointDetails, model.filterStore,
+    )
 }
 
 private class AndroidAppModel(
     val session: SessionCoordinator,
     val points: PointRepository,
-    val resolver: ResolveProtectedTarget,
+    val createPoints: CreatePointRepository,
+    val filterStore: PointFilterStore,
+    val pointDetails: PointDetailOperations,
 ) : ViewModel() {
     val continuation = AuthReturnCoordinator()
 }

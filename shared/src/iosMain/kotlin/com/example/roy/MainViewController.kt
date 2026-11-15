@@ -2,13 +2,16 @@ package com.example.roy
 
 import androidx.compose.ui.window.ComposeUIViewController
 import com.example.roy.data.auth.AuthRemoteDataSource
+import com.example.roy.data.filters.FilterPreferencesStore
+import platform.Foundation.NSUserDefaults
 import com.example.roy.data.auth.IosAuthHttpTransport
 import com.example.roy.data.auth.IosSessionStore
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.data.points.PointRemoteDataSource
-import com.example.roy.data.points.ProtectedTargetRemoteDataSource
+import com.example.roy.data.points.CreatePointRemoteDataSource
+import com.example.roy.data.points.PointDetailRemoteDataSource
 import com.example.roy.domain.map.LoadPoint
-import com.example.roy.domain.navigation.ResolveProtectedTarget
+import com.example.roy.domain.points.PointDetailOperations
 import com.example.roy.location.IosDeviceLocation
 import com.example.roy.presentation.navigation.AuthReturnCoordinator
 import androidx.compose.runtime.remember
@@ -25,8 +28,16 @@ fun MainViewController(apiOrigin: String?) = ComposeUIViewController {
         )
     }
     val continuation = remember(session) { AuthReturnCoordinator() }
-    val resolver = remember(session, points) {
-        ResolveProtectedTarget(LoadPoint(points), session, ProtectedTargetRemoteDataSource(origin, transport))
+    val createPoints = remember(origin) { CreatePointRemoteDataSource(origin, transport) }
+    val pointDetails = remember(session, points, createPoints) {
+        PointDetailOperations(LoadPoint(points), session, PointDetailRemoteDataSource(origin, transport), createPoints::getPresets)
     }
-    App(session, points, location, continuation, resolver)
+    val filterStore = remember {
+        val preferences = NSUserDefaults.standardUserDefaults
+        FilterPreferencesStore(
+            readValue = { preferences.stringForKey("point_filter") },
+            writeValue = { preferences.setObject(it, forKey = "point_filter") },
+        )
+    }
+    App(session, points, location, continuation, createPoints, pointDetails, filterStore)
 }

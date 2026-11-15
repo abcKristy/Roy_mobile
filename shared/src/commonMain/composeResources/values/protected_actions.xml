@@ -1,5 +1,7 @@
 <resources>
     <string name="protected_create">Создать точку</string>
+    <string name="map_create_here">Создать точку здесь</string>
+    <string name="map_create_location">Выбранное место для точки</string>
     <string name="protected_open_chat">Открыть чат</string>
     <string name="protected_open_topic">Открыть чат «%1$s»</string>
     <string name="protected_cancel">Отмена</string>
