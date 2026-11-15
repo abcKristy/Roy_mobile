@@ -27,7 +27,11 @@ private fun MapViewDarkPreview() = MapViewPreview(dark = true)
 private fun MapViewPreview(dark: Boolean) {
     RoyTheme(darkTheme = dark) {
         CompositionLocalProvider(LocalMapSurface provides PreviewMapSurface) {
-            MapView(MapViewState(viewport = ViewportContent.Ready, renderStatus = MapRenderStatus.Ready)) {}
+            MapView(
+                viewState = MapViewState(viewport = ViewportContent.Ready, renderStatus = MapRenderStatus.Ready),
+                markers = emptyList(),
+                eventHandler = {},
+            )
         }
     }
 }
@@ -48,7 +52,7 @@ private object PreviewMapSurface : MapSurface {
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                MapPointPin("football", isSelected = false, contentDescription = "Футбол", onClick = {})
+                MapPointPin("football", isSelected = false, contentDescription = "Садовая улица, Футбол", onClick = {})
                 MapMultiTopicPin(3, isSelected = true, contentDescription = "Три темы", onClick = {})
                 MapDeviceMarker()
             }
