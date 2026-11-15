@@ -14,6 +14,69 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionRefreshTest {
     @Test
+    fun oldScopeCannotSendProtectedReadWithNewCredentials() = runTest {
+        val repository = SessionTestRepository()
+        repository.revoke = { AuthResult.Success(Unit) }
+        val coordinator = SessionCoordinator(repository, SessionTestStore())
+        val credentials = AuthCredentials.Login("+123", "fixture")
+        coordinator.restore()
+        coordinator.authenticate(credentials)
+        val previous = assertIs<SessionStatus.Active>(coordinator.state.value)
+        assertIs<AuthResult.Success<Unit>>(coordinator.logout())
+        assertIs<AuthResult.Success<Unit>>(coordinator.authenticate(credentials))
+
+        var requests = 0
+        val result = coordinator.readProtected(previous.scopeId) {
+            requests++
+            AuthResult.Success(Unit)
+        }
+
+        assertIs<AuthResult.Failure>(result)
+        assertEquals(0, requests)
+        assertEquals(0L, coordinator.expiration.value)
+    }
+
+    @Test
+    fun terminalProtectedReadsClearSessionAndSignalExpirationOnce() = runTest {
+        val repository = SessionTestRepository()
+        val store = SessionTestStore()
+        val coordinator = SessionCoordinator(repository, store)
+        coordinator.restore()
+        coordinator.authenticate(AuthCredentials.Login("+123", "fixture"))
+        val active = assertIs<SessionStatus.Active>(coordinator.state.value)
+        val firstReads = CompletableDeferred<Unit>()
+        val pendingRotation = CompletableDeferred<Unit>()
+        var requests = 0
+        var refreshes = 0
+        repository.rotation = {
+            refreshes++
+            pendingRotation.await()
+            denied()
+        }
+
+        val reads = List(3) {
+            async {
+                coordinator.readProtected(active.scopeId) {
+                    requests++
+                    firstReads.await()
+                    denied()
+                }
+            }
+        }
+        runCurrent()
+        firstReads.complete(Unit)
+        runCurrent()
+        pendingRotation.complete(Unit)
+
+        reads.awaitAll().forEach { assertIs<AuthResult.Failure>(it) }
+        assertEquals(3, requests)
+        assertEquals(1, refreshes)
+        assertEquals(SessionStatus.Guest, coordinator.state.value)
+        assertEquals(null, store.saved)
+        assertEquals(1L, coordinator.expiration.value)
+    }
+
+    @Test
     fun concurrentExpiredReadsShareOneRotationAndRetryRead() = runTest {
         val repository = SessionTestRepository()
         val store = SessionTestStore()

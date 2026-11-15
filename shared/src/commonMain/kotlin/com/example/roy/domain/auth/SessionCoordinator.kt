@@ -34,6 +34,8 @@ internal class SessionCoordinator(
     private var uncommitted: AuthSession? = null
 
     val state = status.asStateFlow()
+    private val expirationId = MutableStateFlow(0L)
+    val expiration = expirationId.asStateFlow()
 
     suspend fun restore(): Unit = restoreGate.withLock {
         val saved = gate.withLock {
@@ -101,20 +103,34 @@ internal class SessionCoordinator(
 
     suspend fun policy(): AuthResult<PrivacyPolicy> = repository.privacyPolicy()
 
-    suspend fun currentUser(): AuthResult<AuthUser> {
+    suspend fun currentUser(): AuthResult<AuthUser> = readProtected(read = repository::currentUser)
+
+    /** The callback must be a read. A credential rejection can cause one retry. */
+    suspend fun <T> readProtected(
+        expectedScopeId: Long? = null,
+        read: suspend (String) -> AuthResult<T>,
+    ): AuthResult<T> {
         val (observed, observedScope, wave) = gate.withLock {
+            if (expectedScopeId != null && status.value != SessionStatus.Active(expectedScopeId)) return expired()
             val current = session?.takeUnless { closing } ?: return expired()
             if (readWave.result?.isCompleted == true) readWave = ReadWave()
             Triple(current, scopeId, readWave)
         }
-        val first = repository.currentUser(observed.accessToken)
+        val first = read(observed.accessToken)
         if (gate.withLock { scopeId != observedScope }) return expired()
         if (!first.isTerminalAccess()) return first
         return when (val refreshed = refresh(observed, observedScope, wave)) {
             is AuthResult.Failure -> refreshed
             is AuthResult.Success -> {
-                val retry = repository.currentUser(refreshed.value.accessToken)
-                if (gate.withLock { scopeId != observedScope }) expired() else retry
+                val retry = read(refreshed.value.accessToken)
+                gate.withLock {
+                    if (scopeId != observedScope) return@withLock expired()
+                    if (retry.isTerminalAccess() && session === refreshed.value && !closing) {
+                        val cleared = endSession(expired = true)
+                        if (cleared is AuthResult.Failure) return@withLock cleared
+                    }
+                    retry
+                }
             }
         }
     }
@@ -181,7 +197,7 @@ internal class SessionCoordinator(
                         }
                         is AuthResult.Failure -> {
                             if (result.isTerminalAccess()) {
-                                when (val cleared = endSession()) {
+                                when (val cleared = endSession(expired = !forLogout && !closing)) {
                                     is AuthResult.Failure -> cleared
                                     is AuthResult.Success -> result
                                 }
@@ -225,7 +241,7 @@ internal class SessionCoordinator(
         }
     }
 
-    private suspend fun endSession(): AuthResult<Unit> = withContext(NonCancellable) {
+    private suspend fun endSession(expired: Boolean = false): AuthResult<Unit> = withContext(NonCancellable) {
         pendingClear = true
         session = null
         readWave = ReadWave()
@@ -235,6 +251,7 @@ internal class SessionCoordinator(
             store.clear()
             pendingClear = false
             status.value = SessionStatus.Guest
+            if (expired) expirationId.value++
             AuthResult.Success(Unit)
         } catch (failure: Exception) {
             if (failure is CancellationException) throw failure
