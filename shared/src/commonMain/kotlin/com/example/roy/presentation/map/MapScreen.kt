@@ -61,6 +61,20 @@ internal fun MapScreen(
     BackHandler(enabled = state.selectedPointId != null) { eventHandler(MapViewEvent.PreviewClosed) }
     val dark = RoyTheme.isDark
     val surface = remember(dark) { MapLibreSurface(MapStyleConfig.url(dark)) }
+    val markers = state.points.map { point ->
+        val topic = point.topics.singleOrNull()
+        val label = if (topic == null) {
+            point.address
+        } else {
+            stringResource(Res.string.map_single_pin_label, point.address, topic.label)
+        }
+        MapMarker(
+            pointId = point.id,
+            position = point.position,
+            label = label,
+            topicKeys = point.topics.map { it.presetKey },
+        )
+    }
     CollectMviActions(viewModel.viewAction) { action ->
         when (action) {
             is MapViewAction.OpenDetails -> onOpenDetails(action.pointId)
@@ -71,12 +85,16 @@ internal fun MapScreen(
         }
     }
     CompositionLocalProvider(LocalMapSurface provides surface) {
-        MapView(state, eventHandler)
+        MapView(state, markers, eventHandler)
     }
 }
 
 @Composable
-internal fun MapView(viewState: MapViewState, eventHandler: (MapViewEvent) -> Unit) {
+internal fun MapView(
+    viewState: MapViewState,
+    markers: List<MapMarker>,
+    eventHandler: (MapViewEvent) -> Unit,
+) {
     val surface = LocalMapSurface.current
     val spacing = RoyTheme.dimensions.spacing
     val uri = LocalUriHandler.current
@@ -88,9 +106,7 @@ internal fun MapView(viewState: MapViewState, eventHandler: (MapViewEvent) -> Un
                     cameraCommand = viewState.cameraCommand,
                     devicePosition = viewState.devicePosition,
                     selectedPointId = viewState.selectedPointId,
-                    markers = viewState.points.map {
-                        MapMarker(it.id, it.position, it.address, it.topics.map { topic -> topic.presetKey })
-                    },
+                    markers = markers,
                     onCameraApplied = { eventHandler(MapViewEvent.CameraApplied(it)) },
                     onCameraSettled = { eventHandler(MapViewEvent.CameraSettled(it)) },
                 ),
