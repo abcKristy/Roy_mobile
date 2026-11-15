@@ -49,7 +49,7 @@ internal fun MapScreen(
     snackbar: RoySnackbarHostState,
     nextMessageId: () -> Long,
     onOpenDetails: (String) -> Unit,
-    onCreatePoint: (Position) -> Unit,
+    onCreatePoint: (Position) -> Boolean,
 ) {
     val state by viewModel.viewState.collectAsStateWithLifecycle()
     val gone = stringResource(Res.string.map_point_gone)
@@ -64,7 +64,9 @@ internal fun MapScreen(
     CollectMviActions(viewModel.viewAction) { action ->
         when (action) {
             is MapViewAction.OpenDetails -> onOpenDetails(action.pointId)
-            is MapViewAction.OpenCreate -> onCreatePoint(action.position)
+            is MapViewAction.OpenCreate -> {
+                if (!onCreatePoint(action.position)) eventHandler(MapViewEvent.CreateNavigationDeclined)
+            }
             MapViewAction.PointGone -> snackbar.show(RoySnackbarMessage(nextMessageId(), gone))
         }
     }

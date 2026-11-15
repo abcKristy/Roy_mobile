@@ -53,6 +53,7 @@ internal sealed class MapViewEvent {
     data class PinSelected(val pointId: String) : MapViewEvent()
     data class MapTapped(val position: Position) : MapViewEvent()
     data object CreateRequested : MapViewEvent()
+    data object CreateNavigationDeclined : MapViewEvent()
     data class RenderingChanged(val status: MapRenderStatus) : MapViewEvent()
     data class CameraApplied(val requestId: Long) : MapViewEvent()
     data class CameraSettled(val camera: MapCamera) : MapViewEvent()
@@ -86,6 +87,8 @@ internal class MapViewModel(
     private var detailJob: Job? = null
     private var navigationJob: Job? = null
 
+    private var createNavigationRequested = false
+
     override fun handleEvent(event: MapViewEvent) {
         when (event) {
             is MapViewEvent.ViewportChanged -> viewportChanged(event.bounds)
@@ -96,13 +99,17 @@ internal class MapViewModel(
             }
             is MapViewEvent.MapTapped -> mapTapped(event.position)
             MapViewEvent.CreateRequested -> createRequested()
+            MapViewEvent.CreateNavigationDeclined -> createNavigationRequested = false
             is MapViewEvent.RenderingChanged -> updateState { it.copy(renderStatus = event.status) }
             is MapViewEvent.CameraApplied -> cameraApplied(event.requestId)
             is MapViewEvent.CameraSettled -> updateState {
                 if (it.camera == event.camera) it else it.copy(camera = event.camera, createPosition = null)
             }
             MapViewEvent.LocateRequested -> locateRequested()
-            MapViewEvent.ScreenResumed -> recheckLocationAccess()
+            MapViewEvent.ScreenResumed -> {
+                createNavigationRequested = false
+                recheckLocationAccess()
+            }
             MapViewEvent.ScreenLeft -> screenLeft()
             MapViewEvent.PreviewClosed -> previewClosed()
             MapViewEvent.DetailsRequested -> detailsRequested()
@@ -181,6 +188,8 @@ internal class MapViewModel(
     }
 
     private fun createRequested() {
+        if (createNavigationRequested) return
+        createNavigationRequested = true
         val state = viewState.value
         viewModelScope.launch { sendAction(MapViewAction.OpenCreate(state.createPosition ?: state.camera.center)) }
     }

@@ -88,10 +88,12 @@ internal fun RoyRootScreen(
         }
     }
 
-    fun request(intent: PendingProtectedIntent) {
+    fun request(intent: PendingProtectedIntent): Boolean {
         val current = navController.currentDestination
-        if (current?.hasRoute<RoyRoute.ProtectedTarget>() == true) return
-        navigate(continuation.request(intent, session.state.value))
+        if (current?.hasRoute<RoyRoute.ProtectedTarget>() == true) return false
+        val effect = continuation.request(intent, session.state.value) ?: return false
+        navigate(effect)
+        return true
     }
 
     LaunchedEffect(sessionStatus, expiration) {
@@ -148,11 +150,14 @@ internal fun RoyRootScreen(
                                 navController.navigate(RoyRoute.PointDetails(pointId)) { launchSingleTop = true }
                             }
                         },
-                        onCreatePoint = { request(PendingProtectedIntent.CreatePoint(it)) },
+                        onCreatePoint = {
+                            navController.currentDestination?.hasRoute<RoyRoute.Map>() == true &&
+                                request(PendingProtectedIntent.CreatePoint(it))
+                        },
                     )
                 },
                 pointDetails = {
-                    PublicPointTopicsScreen(it, loadPoint, { navController.popBackStack() }, ::request)
+                    PublicPointTopicsScreen(it, loadPoint, { navController.popBackStack() }) { intent -> request(intent) }
                 },
                 protectedAuth = { flowId ->
                     if (continuation.isAuthOpen(flowId)) {
