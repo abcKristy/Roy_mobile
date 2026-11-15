@@ -201,6 +201,29 @@ class MapViewModelTest {
     }
 
     @Test
+    fun rapidCreateRequestsQueueOneNavigationUntilTheMapResumes() = mapTest {
+        val model = model(ControlledPoints())
+        val actions = mutableListOf<MapViewAction>()
+        backgroundScope.launch { model.viewAction.collect { actions += it } }
+
+        model.handleEvent(MapViewEvent.CreateRequested)
+        model.handleEvent(MapViewEvent.CreateRequested)
+        runCurrent()
+        assertEquals(listOf<MapViewAction>(MapViewAction.OpenCreate(MoscowCamera.center)), actions)
+
+        model.handleEvent(MapViewEvent.ScreenLeft)
+        model.handleEvent(MapViewEvent.ScreenResumed)
+        model.handleEvent(MapViewEvent.CreateRequested)
+        runCurrent()
+        assertEquals(List<MapViewAction>(2) { MapViewAction.OpenCreate(MoscowCamera.center) }, actions)
+
+        model.handleEvent(MapViewEvent.CreateNavigationDeclined)
+        model.handleEvent(MapViewEvent.CreateRequested)
+        runCurrent()
+        assertEquals(List<MapViewAction>(3) { MapViewAction.OpenCreate(MoscowCamera.center) }, actions)
+    }
+
+    @Test
     fun returningWithLocationDisabledClearsOldMarkerWithoutLocatingAgain() = mapTest {
         var accessProblem: DeviceLocationResult? = null
         var locationCalls = 0
