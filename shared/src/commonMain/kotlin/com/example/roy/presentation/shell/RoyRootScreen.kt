@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModelStore
@@ -65,7 +64,6 @@ internal fun RoyRootScreen(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val snackbar = remember { RoySnackbarHostState() }
     var snackbarMessageId by remember { mutableLongStateOf(0L) }
-    var target by remember { mutableStateOf<ProtectedNavigation.Continue?>(null) }
     val expiration by session.expiration.collectAsStateWithLifecycle()
     val loadPoint = remember(points) { LoadPoint(points) }
     val goneMessage = stringResource(Res.string.map_point_gone)
@@ -82,7 +80,7 @@ internal fun RoyRootScreen(
             }
             is ProtectedNavigation.Continue -> {
                 if ((session.state.value as? SessionStatus.Active)?.scopeId != effect.scopeId) return
-                target = effect
+                continuation.showTarget(effect)
                 navController.navigate(RoyRoute.ProtectedTarget) { launchSingleTop = true }
             }
         }
@@ -96,6 +94,10 @@ internal fun RoyRootScreen(
         return true
     }
 
+    fun isCurrentTarget(expected: ProtectedNavigation.Continue): Boolean =
+        navController.currentDestination?.hasRoute<RoyRoute.ProtectedTarget>() == true &&
+            continuation.currentTarget === expected
+
     LaunchedEffect(sessionStatus, expiration) {
         val effect = continuation.onSessionChanged(sessionStatus)
         if (sessionStatus == SessionStatus.Guest) {
@@ -103,6 +105,11 @@ internal fun RoyRootScreen(
         } else {
             navigate(effect)
         }
+    }
+
+    LaunchedEffect(backStackEntry) {
+        val destination = navController.currentDestination ?: return@LaunchedEffect
+        if (!destination.hasRoute<RoyRoute.ProtectedTarget>()) continuation.clearTarget()
     }
 
     CollectMviActions(viewModel.viewAction) { action ->
@@ -187,15 +194,23 @@ internal fun RoyRootScreen(
                     }
                 },
                 protectedTarget = {
-                    val current = target
+                    val current = continuation.currentTarget
                     if (current != null && (sessionStatus as? SessionStatus.Active)?.scopeId == current.scopeId) {
                         ProtectedTargetScreen(
                             current,
                             resolver,
-                            onBack = { navController.popBackStack() },
+                            onBack = {
+                                if (isCurrentTarget(current)) {
+                                    continuation.clearTarget()
+                                    navController.popBackStack()
+                                }
+                            },
                             onGone = {
-                                navController.popBackStack<RoyRoute.Map>(inclusive = false)
-                                snackbar.show(RoySnackbarMessage(++snackbarMessageId, goneMessage))
+                                if (isCurrentTarget(current)) {
+                                    continuation.clearTarget()
+                                    navController.popBackStack<RoyRoute.Map>(inclusive = false)
+                                    snackbar.show(RoySnackbarMessage(++snackbarMessageId, goneMessage))
+                                }
                             },
                         )
                     } else {

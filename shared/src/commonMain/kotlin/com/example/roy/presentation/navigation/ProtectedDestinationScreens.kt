@@ -27,6 +27,7 @@ import com.example.roy.presentation.components.TertiaryButton
 import com.example.roy.presentation.components.feedback.ErrorState
 import com.example.roy.presentation.components.feedback.LoadingMode
 import com.example.roy.presentation.components.feedback.LoadingState
+import com.example.roy.presentation.components.fields.RoyTextField
 import com.example.roy.presentation.core.BaseViewModel
 import com.example.roy.presentation.core.CollectMviActions
 import com.example.roy.presentation.theme.RoyTheme
@@ -91,7 +92,17 @@ internal fun ProtectedTargetScreen(
     }
     val state by model.viewState.collectAsStateWithLifecycle()
     CollectMviActions(model.viewAction) { onGone() }
-    ProtectedTargetView(state.result, onBack) { model.handleEvent(DestinationEvent.Retry) }
+    val draftForm = if (target.intent is PendingProtectedIntent.CreatePoint) {
+        viewModel { PreparedDraftViewModel() }
+    } else null
+    val formState = draftForm?.viewState?.collectAsStateWithLifecycle()?.value
+    ProtectedTargetView(
+        state.result,
+        onBack,
+        onRetry = { model.handleEvent(DestinationEvent.Retry) },
+        draftAddress = formState?.address.orEmpty(),
+        onDraftAddressChanged = { draftForm?.handleEvent(DraftAddressChanged(it)) },
+    )
 }
 
 @Composable
@@ -99,13 +110,20 @@ internal fun ProtectedTargetView(
     result: ProtectedTargetResult<PreparedContinuation>?,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    draftAddress: String = "",
+    onDraftAddressChanged: (String) -> Unit = {},
 ) {
     DestinationContent {
         TertiaryButton(stringResource(Res.string.protected_back), onBack)
         when (result) {
             null -> LoadingState(LoadingMode.Inline, stringResource(Res.string.protected_loading))
             is ProtectedTargetResult.Ready -> when (val destination = result.value) {
-                is PreparedContinuation.Draft -> DraftHandoff(destination.position, destination.context)
+                is PreparedContinuation.Draft -> DraftHandoff(
+                    destination.position,
+                    destination.context,
+                    draftAddress,
+                    onDraftAddressChanged,
+                )
                 is PreparedContinuation.Topic -> DestinationHeading(stringResource(Res.string.protected_topic_prepared))
             }
             ProtectedTargetResult.Gone -> Unit
@@ -120,12 +138,18 @@ internal fun ProtectedTargetView(
 }
 
 @Composable
-private fun DraftHandoff(position: Position, context: DraftContext) {
+private fun DraftHandoff(
+    position: Position,
+    context: DraftContext,
+    address: String,
+    onAddressChanged: (String) -> Unit,
+) {
     DestinationHeading(stringResource(Res.string.protected_draft))
     DestinationText(
         stringResource(Res.string.protected_coordinates, position.latitude.toString(), position.longitude.toString()),
     )
     DestinationText(stringResource(Res.string.protected_quota, context.weekRemaining, context.monthRemaining))
+    RoyTextField(address, stringResource(Res.string.protected_draft_address), onAddressChanged)
     if (context.nearbyAddresses.isNotEmpty()) {
         DestinationHeading(stringResource(Res.string.protected_nearby))
         context.nearbyAddresses.forEach { DestinationText(it) }
@@ -168,6 +192,16 @@ private inline fun <T, R> ProtectedTargetResult<T>.mapReady(transform: (T) -> R)
         ProtectedTargetResult.Forbidden -> ProtectedTargetResult.Forbidden
         ProtectedTargetResult.Unavailable -> ProtectedTargetResult.Unavailable
     }
+
+private data class PreparedDraftState(val address: String = "")
+private data class DraftAddressChanged(val address: String)
+
+private class PreparedDraftViewModel :
+    BaseViewModel<PreparedDraftState, DraftAddressChanged, Nothing>(PreparedDraftState()) {
+    override fun handleEvent(event: DraftAddressChanged) {
+        updateState { it.copy(address = event.address) }
+    }
+}
 
 private data class DestinationState<T>(val result: T? = null)
 private enum class DestinationEvent { Retry }

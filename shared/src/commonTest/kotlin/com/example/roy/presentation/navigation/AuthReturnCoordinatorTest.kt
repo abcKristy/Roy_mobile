@@ -46,6 +46,20 @@ class AuthReturnCoordinatorTest {
     }
 
     @Test
+    fun shownTargetSurvivesSameScopeButClearsWhenTheSessionChanges() {
+        val coordinator = AuthReturnCoordinator()
+        val target = assertIs<ProtectedNavigation.Continue>(coordinator.request(create, active))
+        coordinator.showTarget(target)
+
+        assertNull(coordinator.onSessionChanged(active))
+        assertEquals(target, coordinator.currentTarget)
+        assertNull(AuthReturnCoordinator().currentTarget)
+
+        coordinator.onSessionChanged(SessionStatus.Active(active.scopeId + 1))
+        assertNull(coordinator.currentTarget)
+    }
+
+    @Test
     fun authorizedActionContinuesWithItsScope() {
         val coordinator = AuthReturnCoordinator()
         assertEquals(
