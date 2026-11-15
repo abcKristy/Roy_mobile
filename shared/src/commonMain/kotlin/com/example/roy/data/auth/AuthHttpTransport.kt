@@ -16,7 +16,7 @@ internal class AuthHttpRequest(
     val headers: Map<String, String> = emptyMap(),
 )
 
-internal class AuthHttpResponse(val status: Int, val body: String)
+internal class AuthHttpResponse(val status: Int, val body: String, val retryAfter: String? = null)
 
 /** Returns null when no HTTP response is available. Implementations never follow redirects. */
 internal fun interface AuthHttpTransport {

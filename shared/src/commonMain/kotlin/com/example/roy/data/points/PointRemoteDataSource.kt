@@ -3,6 +3,7 @@ package com.example.roy.data.points
 import com.example.roy.data.auth.AuthHttpMethod
 import com.example.roy.data.auth.AuthHttpRequest
 import com.example.roy.data.auth.AuthHttpTransport
+import com.example.roy.data.network.encodeQueryValue
 import com.example.roy.domain.map.Point
 import com.example.roy.domain.map.PointError
 import com.example.roy.domain.map.PointPage
@@ -141,15 +142,3 @@ private val PointJson = Json { ignoreUnknownKeys = true }
 private val PointId = Regex("[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 private val ApiOrigin = Regex("""(?:https://[A-Za-z0-9.-]+|http://127\.0\.0\.1)(?::([0-9]{1,5}))?""")
 private const val MaxPointResponseBytes = 2 * 1024 * 1024
-private const val Hex = "0123456789ABCDEF"
-
-private fun String.encodeQueryValue(): String = buildString {
-    for (byte in encodeToByteArray()) {
-        val value = byte.toInt() and 0xff
-        val char = value.toChar()
-        when (char) {
-            in 'A'..'Z', in 'a'..'z', in '0'..'9', '-', '.', '_', '~' -> append(char)
-            else -> append('%').append(Hex[value shr 4]).append(Hex[value and 0xf])
-        }
-    }
-}

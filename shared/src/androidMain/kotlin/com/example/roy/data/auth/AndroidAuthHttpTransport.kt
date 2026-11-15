@@ -42,7 +42,7 @@ internal class AndroidAuthHttpTransport : AuthHttpTransport {
                             val source = it.body?.source()
                             val body = if (source == null || source.request(request.maxResponseBytes.toLong() + 1)) ""
                             else source.readUtf8()
-                            AuthHttpResponse(it.code, body)
+                            AuthHttpResponse(it.code, body, it.header("Retry-After"))
                         }
                     } catch (_: IOException) {
                         null

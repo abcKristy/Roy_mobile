@@ -1,6 +1,7 @@
 package com.example.roy.presentation.points.create
 
 import androidx.compose.runtime.Composable
+import com.example.roy.presentation.core.formatLocalDateTime
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.backhandler.BackHandler
@@ -13,7 +14,6 @@ import com.example.roy.domain.points.codePointLength
 import com.example.roy.presentation.core.CollectMviActions
 import kotlin.math.round
 import kotlin.math.roundToInt
-import kotlin.time.Instant
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.*
 
@@ -85,7 +85,7 @@ internal fun CreatePointScreen(
         )
         is CreatePointDialog.Blocked -> ConfirmCreatePointDialog(
             title = stringResource(Res.string.create_point_blocked_title),
-            body = stringResource(Res.string.create_point_blocked_body, formatCreateBlockDeadline(dialog.until)),
+            body = stringResource(Res.string.create_point_blocked_body, formatLocalDateTime(dialog.until)),
             confirm = stringResource(Res.string.create_point_ok),
             cancel = null,
             eventHandler = eventHandler,
@@ -130,7 +130,7 @@ internal fun resolveCreatePointText(state: CreatePointViewState): CreatePointTex
         quotaTitle = stringResource(Res.string.create_point_quota),
         weekQuota = quota?.let { stringResource(Res.string.create_point_week_quota, it.weekUsed, it.weekLimit) },
         monthQuota = quota?.let { stringResource(Res.string.create_point_month_quota, it.monthUsed, it.monthLimit) },
-        blockedUntil = state.blockedUntil?.let { stringResource(Res.string.create_point_blocked_body, formatCreateBlockDeadline(it)) },
+        blockedUntil = state.blockedUntil?.let { stringResource(Res.string.create_point_blocked_body, formatLocalDateTime(it)) },
         quotaLoading = stringResource(Res.string.create_point_quota_loading),
         quotaError = stringResource(Res.string.create_point_quota_error),
         retry = stringResource(Res.string.create_point_retry),
@@ -140,6 +140,5 @@ internal fun resolveCreatePointText(state: CreatePointViewState): CreatePointTex
     )
 }
 
-internal expect fun formatCreateBlockDeadline(instant: Instant): String
 
 private fun formatCoordinate(value: Double): String = (round(value * 100_000) / 100_000).toString()

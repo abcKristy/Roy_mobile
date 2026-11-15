@@ -105,6 +105,9 @@ internal class SessionCoordinator(
 
     suspend fun currentUser(): AuthResult<AuthUser> = readProtected(read = repository::currentUser)
 
+    suspend fun currentUser(expectedScopeId: Long): AuthResult<AuthUser> =
+        readProtected(expectedScopeId, repository::currentUser)
+
     /** The callback must be a read. A credential rejection can cause one retry. */
     suspend fun <T> readProtected(
         expectedScopeId: Long? = null,
@@ -152,6 +155,12 @@ internal class SessionCoordinator(
         return when (val refreshed = refresh(observed, expectedScopeId, wave)) {
             is AuthResult.Success -> result
             is AuthResult.Failure -> refreshed
+        }
+    }
+
+    suspend fun invalidateRevokedScope(expectedScopeId: Long, userId: String): Unit = gate.withLock {
+        if (!closing && status.value == SessionStatus.Active(expectedScopeId) && session?.user?.id == userId) {
+            endSession(expired = true)
         }
     }
 

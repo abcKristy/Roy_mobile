@@ -28,6 +28,7 @@ import roy.shared.generated.resources.app_name
 internal fun RoyShellLayout(
     snackbar: RoySnackbarHostState,
     tabs: @Composable () -> Unit,
+    showTitle: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val colors = RoyTheme.colors
@@ -35,7 +36,7 @@ internal fun RoyShellLayout(
     val insets = WindowInsets.safeContent
     val horizontalInsets = insets.only(WindowInsetsSides.Horizontal)
     Column(Modifier.fillMaxSize().background(colors.background).windowInsetsPadding(insets.only(WindowInsetsSides.Top))) {
-        BasicText(
+        if (showTitle) BasicText(
             text = stringResource(Res.string.app_name),
             modifier = Modifier.windowInsetsPadding(horizontalInsets).padding(spacing.medium).semantics { heading() },
             style = RoyTheme.typography.headingLarge.copy(color = colors.textPrimary),

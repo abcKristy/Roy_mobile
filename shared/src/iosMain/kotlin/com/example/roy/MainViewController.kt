@@ -3,6 +3,7 @@ package com.example.roy
 import androidx.compose.ui.window.ComposeUIViewController
 import com.example.roy.data.auth.AuthRemoteDataSource
 import com.example.roy.data.filters.FilterPreferencesStore
+import com.example.roy.data.chat.chatConnectivity
 import platform.Foundation.NSUserDefaults
 import com.example.roy.data.auth.IosAuthHttpTransport
 import com.example.roy.data.auth.IosSessionStore
@@ -39,5 +40,6 @@ fun MainViewController(apiOrigin: String?) = ComposeUIViewController {
             writeValue = { preferences.setObject(it, forKey = "point_filter") },
         )
     }
-    App(session, points, location, continuation, createPoints, pointDetails, filterStore)
+    val connectivity = remember { chatConnectivity() }
+    App(session, points, location, continuation, createPoints, pointDetails, filterStore, origin, transport, connectivity)
 }

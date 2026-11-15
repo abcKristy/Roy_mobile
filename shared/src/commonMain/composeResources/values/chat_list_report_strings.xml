@@ -1,0 +1,19 @@
+<resources>
+    <string name="chat_list_loading">Загружаем чаты</string>
+    <string name="chat_list_error">Не удалось загрузить чаты</string>
+    <string name="chat_list_read_error">Проверьте подключение и повторите попытку.</string>
+    <string name="chat_list_load_more">Показать ещё чаты</string>
+    <string name="chat_list_no_messages">Пока нет сообщений</string>
+    <string name="chat_list_unread">Непрочитанные сообщения: %1$s</string>
+    <string name="chat_report_title">Жалоба на пользователя %1$s</string>
+    <string name="chat_report_reason">Причина жалобы</string>
+    <string name="chat_report_invalid">Укажите причину длиной от 1 до 1000 символов.</string>
+    <string name="chat_report_submit">Отправить жалобу</string>
+    <string name="chat_report_cancel">Отмена</string>
+    <string name="chat_report_close">Закрыть</string>
+    <string name="chat_report_submitted">Жалоба отправлена.</string>
+    <string name="chat_report_duplicate">Вы уже отправили жалобу на этого пользователя.</string>
+    <string name="chat_report_forbidden">На этого пользователя сейчас нельзя пожаловаться.</string>
+    <string name="chat_report_retry">Не удалось подтвердить отправку. Повторите попытку.</string>
+    <string name="chat_report_failed">Не удалось отправить жалобу.</string>
+</resources>

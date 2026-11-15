@@ -6,10 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
@@ -26,15 +23,7 @@ import androidx.navigation.toRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.dialog
-import com.example.roy.presentation.components.feedback.EmptyCourtyardIllustration
-import com.example.roy.presentation.components.feedback.EmptyState
-import com.example.roy.presentation.components.feedback.EmptyStateAction
 import com.example.roy.presentation.theme.RoyTheme
-import org.jetbrains.compose.resources.stringResource
-import roy.shared.generated.resources.Res
-import roy.shared.generated.resources.empty_chats_body
-import roy.shared.generated.resources.empty_chats_open_map
-import roy.shared.generated.resources.empty_chats_title
 
 private val tabRoutes = mapOf(
     MainTab.Profile to RoyRoute.Profile,
@@ -69,7 +58,7 @@ internal fun RoyNavHost(
     topicChat: @Composable (RoyRoute.TopicChat) -> Unit,
     protectedAuth: @Composable (Long) -> Unit,
     protectedTarget: @Composable () -> Unit,
-    onOpenMap: () -> Unit,
+    chats: @Composable () -> Unit,
 ) {
     val latestProfile by rememberUpdatedState(profile)
     val latestMap by rememberUpdatedState(map)
@@ -78,7 +67,7 @@ internal fun RoyNavHost(
     val latestTopicChat by rememberUpdatedState(topicChat)
     val latestAuth by rememberUpdatedState(protectedAuth)
     val latestTarget by rememberUpdatedState(protectedTarget)
-    val latestOpenMap by rememberUpdatedState(onOpenMap)
+    val latestChats by rememberUpdatedState(chats)
     NavHost(navController = navController, startDestination = RoyRoute.Map, modifier = Modifier.fillMaxSize()) {
         composable<RoyRoute.Map> { latestMap() }
         composable<RoyRoute.MapFilters> { latestMapFilters() }
@@ -105,20 +94,6 @@ internal fun RoyNavHost(
             }
         }
         composable<RoyRoute.Profile> { latestProfile() }
-        composable<RoyRoute.Chats> {
-            Box(
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-                    .padding(RoyTheme.dimensions.spacing.medium),
-                contentAlignment = Alignment.Center,
-            ) {
-                EmptyState(
-                    title = stringResource(Res.string.empty_chats_title),
-                    body = stringResource(Res.string.empty_chats_body),
-                    modifier = Modifier.widthIn(max = 360.dp),
-                    illustration = { EmptyCourtyardIllustration() },
-                    action = EmptyStateAction(stringResource(Res.string.empty_chats_open_map), latestOpenMap),
-                )
-            }
-        }
+        composable<RoyRoute.Chats> { latestChats() }
     }
 }

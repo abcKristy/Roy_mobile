@@ -3,8 +3,16 @@ package com.example.roy
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.roy.data.auth.AuthHttpTransport
+import com.example.roy.data.chat.ChatHistoryRemoteDataSource
+import com.example.roy.data.chat.ChatListRemoteDataSource
+import com.example.roy.data.chat.ChatRealtimeClient
+import com.example.roy.data.chat.ChatWriteRemoteDataSource
+import com.example.roy.data.chat.createChatSocketTransport
+import com.example.roy.domain.chat.ChatListOperations
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.SessionStatus
 import com.example.roy.domain.location.DeviceLocation
@@ -19,6 +27,7 @@ import com.example.roy.presentation.shell.RoyRootScreen
 import com.example.roy.presentation.navigation.AuthReturnCoordinator
 import com.example.roy.presentation.theme.RoyTheme
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.Flow
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.Res
 import roy.shared.generated.resources.auth_network
@@ -34,9 +43,20 @@ internal fun App(
     createPoints: CreatePointRepository,
     pointDetails: PointDetailOperations,
     filterStore: PointFilterStore,
+    origin: String,
+    transport: AuthHttpTransport,
+    connectivity: Flow<Boolean>,
 ) {
     val state by session.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val chatHistory = remember(origin, transport) { ChatHistoryRemoteDataSource(origin, transport) }
+    val chatWriter = remember(origin, transport) { ChatWriteRemoteDataSource(origin, transport) }
+    val chatList = remember(origin, transport, session) {
+        ChatListOperations(session, ChatListRemoteDataSource(origin, transport))
+    }
+    val chatRealtime = remember(origin, session, scope) {
+        ChatRealtimeClient(origin, createChatSocketTransport(), session, scope)
+    }
     LaunchedEffect(session) { session.restore() }
     RoyTheme {
         val current = state
@@ -57,7 +77,10 @@ internal fun App(
                     )
                 }
             } else null
-            RoyRootScreen(session, points, location, current, continuation, createPoints, pointDetails, filterStore, guestProfile)
+            RoyRootScreen(
+                session, points, location, current, continuation, createPoints, pointDetails, filterStore,
+                chatHistory, chatWriter, chatList, chatRealtime, connectivity, guestProfile,
+            )
         }
     }
 }

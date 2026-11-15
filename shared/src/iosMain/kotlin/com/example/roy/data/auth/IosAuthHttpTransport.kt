@@ -60,7 +60,13 @@ internal class IosAuthHttpTransport : AuthHttpTransport {
             val http = response as? NSHTTPURLResponse
             continuation.resume(
                 if (error == null && http != null) {
-                    AuthHttpResponse(http.statusCode.toInt(), data?.utf8Text(request.maxResponseBytes).orEmpty())
+                    AuthHttpResponse(
+                        http.statusCode.toInt(),
+                        data?.utf8Text(request.maxResponseBytes).orEmpty(),
+                        http.allHeaderFields.entries.firstOrNull {
+                            (it.key as? String)?.equals("Retry-After", ignoreCase = true) == true
+                        }?.value as? String,
+                    )
                 }
                 else null
             )

@@ -7,8 +7,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.roy.App
 import com.example.roy.data.auth.AndroidAuthHttpTransport
 import com.example.roy.data.auth.AndroidSessionStore
+import com.example.roy.data.auth.AuthHttpTransport
 import com.example.roy.data.auth.AuthRemoteDataSource
 import com.example.roy.data.filters.FilterPreferencesStore
+import com.example.roy.data.chat.chatConnectivity
+import kotlinx.coroutines.flow.Flow
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.data.points.PointRemoteDataSource
 import com.example.roy.data.points.CreatePointRemoteDataSource
@@ -36,6 +39,9 @@ fun RoyAndroidApp(context: Context, origin: String?) {
             writeValue = { preferences.edit().putString("point_filter", it).apply() },
         )
         AndroidAppModel(
+            apiOrigin,
+            transport,
+            chatConnectivity(context.applicationContext),
             session,
             points,
             createPoints,
@@ -47,11 +53,14 @@ fun RoyAndroidApp(context: Context, origin: String?) {
     }
     App(
         model.session, model.points, rememberAndroidDeviceLocation(context), model.continuation,
-        model.createPoints, model.pointDetails, model.filterStore,
+        model.createPoints, model.pointDetails, model.filterStore, model.origin, model.transport, model.connectivity,
     )
 }
 
 private class AndroidAppModel(
+    val origin: String,
+    val transport: AuthHttpTransport,
+    val connectivity: Flow<Boolean>,
     val session: SessionCoordinator,
     val points: PointRepository,
     val createPoints: CreatePointRepository,
