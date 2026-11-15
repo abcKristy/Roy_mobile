@@ -70,6 +70,7 @@ import roy.shared.generated.resources.chat_list_unread
 import roy.shared.generated.resources.empty_chats_body
 import roy.shared.generated.resources.empty_chats_open_map
 import roy.shared.generated.resources.empty_chats_title
+import roy.shared.generated.resources.tab_chats
 
 @Composable
 internal fun ChatListScreen(
@@ -127,7 +128,7 @@ internal fun ChatListView(
     ) {
         item {
             BasicText(
-                stringResource(Res.string.empty_chats_title),
+                stringResource(Res.string.tab_chats),
                 Modifier.semantics { heading() },
                 style = RoyTheme.typography.headingMedium.copy(color = RoyTheme.colors.textPrimary),
             )
