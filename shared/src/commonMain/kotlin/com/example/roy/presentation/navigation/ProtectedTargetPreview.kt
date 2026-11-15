@@ -17,6 +17,7 @@ private fun DraftHandoffPreview() {
             ),
             onBack = {},
             onRetry = {},
+            draftAddress = "Тверская улица, 1",
         )
     }
 }

@@ -18,6 +18,16 @@ internal class AuthReturnCoordinator {
     private var handledExpiryId: Long? = null
 
     val currentAuthFlowId: Long? get() = flow?.id
+    var currentTarget: ProtectedNavigation.Continue? = null
+        private set
+
+    fun showTarget(target: ProtectedNavigation.Continue) {
+        currentTarget = target
+    }
+
+    fun clearTarget() {
+        currentTarget = null
+    }
 
     fun request(intent: PendingProtectedIntent, session: SessionStatus): ProtectedNavigation? {
         updateSessionScope(session)
@@ -55,6 +65,7 @@ internal class AuthReturnCoordinator {
         if (expiryId <= 0L || handledExpiryId?.let { expiryId <= it } == true) return null
         handledExpiryId = expiryId
         activeScopeId = null
+        clearTarget()
         return beginAuth(null)
     }
 
@@ -85,6 +96,7 @@ internal class AuthReturnCoordinator {
         if (activeScopeId != null && activeScopeId != scope) {
             flow = null
             waitingForSession = null
+            clearTarget()
         }
         activeScopeId = scope
     }
