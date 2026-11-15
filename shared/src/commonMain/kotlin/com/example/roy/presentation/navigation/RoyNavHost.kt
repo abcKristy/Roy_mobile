@@ -5,13 +5,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -24,13 +23,11 @@ import com.example.roy.presentation.components.feedback.EmptyCourtyardIllustrati
 import com.example.roy.presentation.components.feedback.EmptyState
 import com.example.roy.presentation.components.feedback.EmptyStateAction
 import com.example.roy.presentation.theme.RoyTheme
-import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.Res
 import roy.shared.generated.resources.empty_chats_body
 import roy.shared.generated.resources.empty_chats_open_map
 import roy.shared.generated.resources.empty_chats_title
-import roy.shared.generated.resources.map_details
 
 private val tabRoutes = mapOf(
     MainTab.Profile to RoyRoute.Profile,
@@ -60,16 +57,25 @@ internal fun RoyNavHost(
     navController: NavHostController,
     profile: @Composable () -> Unit,
     map: @Composable () -> Unit,
+    pointDetails: @Composable (String) -> Unit,
+    protectedAuth: @Composable (Long) -> Unit,
+    protectedTarget: @Composable () -> Unit,
     onOpenMap: () -> Unit,
 ) {
+    val latestProfile by rememberUpdatedState(profile)
+    val latestMap by rememberUpdatedState(map)
+    val latestPointDetails by rememberUpdatedState(pointDetails)
+    val latestAuth by rememberUpdatedState(protectedAuth)
+    val latestTarget by rememberUpdatedState(protectedTarget)
+    val latestOpenMap by rememberUpdatedState(onOpenMap)
     NavHost(navController = navController, startDestination = RoyRoute.Map, modifier = Modifier.fillMaxSize()) {
-        composable<RoyRoute.Map> { map() }
+        composable<RoyRoute.Map> { latestMap() }
         composable<RoyRoute.PointDetails> { entry ->
-            val pointId = entry.toRoute<RoyRoute.PointDetails>().pointId
-            require(pointId.isNotBlank())
-            DestinationTitle(Res.string.map_details)
+            latestPointDetails(entry.toRoute<RoyRoute.PointDetails>().pointId)
         }
-        composable<RoyRoute.Profile> { profile() }
+        composable<RoyRoute.ProtectedAuth> { latestAuth(it.toRoute<RoyRoute.ProtectedAuth>().flowId) }
+        composable<RoyRoute.ProtectedTarget> { latestTarget() }
+        composable<RoyRoute.Profile> { latestProfile() }
         composable<RoyRoute.Chats> {
             Box(
                 modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -81,20 +87,9 @@ internal fun RoyNavHost(
                     body = stringResource(Res.string.empty_chats_body),
                     modifier = Modifier.widthIn(max = 360.dp),
                     illustration = { EmptyCourtyardIllustration() },
-                    action = EmptyStateAction(stringResource(Res.string.empty_chats_open_map), onOpenMap),
+                    action = EmptyStateAction(stringResource(Res.string.empty_chats_open_map), latestOpenMap),
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun DestinationTitle(title: StringResource) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        BasicText(
-            text = stringResource(title),
-            modifier = Modifier.semantics { heading() },
-            style = RoyTheme.typography.headingMedium.copy(color = RoyTheme.colors.textPrimary),
-        )
     }
 }

@@ -49,7 +49,7 @@ internal fun MapScreen(
     snackbar: RoySnackbarHostState,
     nextMessageId: () -> Long,
     onOpenDetails: (String) -> Unit,
-    onPositionTapped: (Position) -> Unit,
+    onCreatePoint: (Position) -> Unit,
 ) {
     val state by viewModel.viewState.collectAsStateWithLifecycle()
     val gone = stringResource(Res.string.map_point_gone)
@@ -64,7 +64,7 @@ internal fun MapScreen(
     CollectMviActions(viewModel.viewAction) { action ->
         when (action) {
             is MapViewAction.OpenDetails -> onOpenDetails(action.pointId)
-            is MapViewAction.PositionTapped -> onPositionTapped(action.position)
+            is MapViewAction.OpenCreate -> onCreatePoint(action.position)
             MapViewAction.PointGone -> snackbar.show(RoySnackbarMessage(nextMessageId(), gone))
         }
     }
@@ -104,12 +104,21 @@ internal fun MapView(viewState: MapViewState, eventHandler: (MapViewEvent) -> Un
             modifier = Modifier.align(Alignment.TopStart).fillMaxWidth().padding(spacing.small),
             verticalArrangement = Arrangement.spacedBy(spacing.extraSmall),
         ) {
-            MapLocationButton(
-                isLocating = viewState.isLocating,
-                isEnabled = !viewState.isLocating,
-                onClick = { eventHandler(MapViewEvent.LocateRequested) },
-                modifier = Modifier.align(Alignment.End),
-            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(spacing.extraSmall),
+            ) {
+                TertiaryButton(
+                    label = stringResource(Res.string.protected_create),
+                    onClick = { eventHandler(MapViewEvent.CreateRequested) },
+                )
+                MapLocationButton(
+                    isLocating = viewState.isLocating,
+                    isEnabled = !viewState.isLocating,
+                    onClick = { eventHandler(MapViewEvent.LocateRequested) },
+                )
+            }
             MapFeedback(viewState, eventHandler)
         }
 

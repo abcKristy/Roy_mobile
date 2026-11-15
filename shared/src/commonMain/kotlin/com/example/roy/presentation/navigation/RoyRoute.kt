@@ -10,4 +10,6 @@ internal sealed interface RoyRoute {
     @Serializable data object Map : RoyRoute
     @Serializable data object Chats : RoyRoute
     @Serializable data class PointDetails(val pointId: String) : RoyRoute
+    @Serializable data class ProtectedAuth(val flowId: Long) : RoyRoute
+    @Serializable data object ProtectedTarget : RoyRoute
 }

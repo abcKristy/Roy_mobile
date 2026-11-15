@@ -101,4 +101,10 @@ The Map tab opens for guests and starts in Moscow. The Profile tab opens sign-in
 
 For Android Debug, run the backend with synthetic PostGIS fixtures, then map device port 18080 to the backend's local port with `adb reverse tcp:18080 tcp:<backend-port>`. Build and check with `./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug` and run `./gradlew :shared:connectedAndroidDeviceTest` on an attached test device. For iOS, set `ROY_API_ORIGIN` in the Debug scheme and run the `iosApp` scheme on a Mac. Kotlin framework compilation is separate from linking and launching the app in Xcode.
 
+## Guest return after sign-in
+
+On the guest map, choose a location and tap **Создать точку**, or open a public point and choose one of its topic chats. Cancel returns to the source screen. Successful sign-in consumes the pending action once. The create route hands off the selected coordinates and freshly reads nearby points and quota. A topic route re-reads the public point and checks membership through authenticated chat detail before handing off the chat ID.
+
+The prepared destinations exercise the contracts for the creation form and chat screens. Sign-in sends no create or join request. A pending action is held in memory, and a cold start with a restored protected route returns to the map. Terminal session expiry opens sign-in once and clears access to the protected destination.
+
 The next mobile slices can use `PointRepository`, `RoyRoute.PointDetails(pointId)`, the map's `onPositionTapped(Position)` callback, and `MapViewEvent.FilterChanged`. See the [map cards and acceptance evidence](../../spec/plans/tasks/M1/T4/README.md).

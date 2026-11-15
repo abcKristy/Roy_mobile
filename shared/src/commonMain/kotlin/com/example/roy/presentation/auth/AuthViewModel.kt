@@ -45,6 +45,7 @@ internal sealed interface AuthViewEvent {
 internal sealed interface AuthViewAction {
     data class OpenPolicy(val url: String) : AuthViewAction
     data object SwitchMode : AuthViewAction
+    data object Succeeded : AuthViewAction
 }
 
 internal class AuthViewModel(
@@ -113,7 +114,10 @@ internal class AuthViewModel(
                 }
                 viewModelScope.launch {
                     when (val auth = session.authenticate(result.credentials)) {
-                        is AuthResult.Success -> updateState { it.copy(submitting = false) }
+                        is AuthResult.Success -> {
+                            updateState { it.copy(submitting = false) }
+                            sendAction(AuthViewAction.Succeeded)
+                        }
                         is AuthResult.Failure -> {
                             val error = auth.error
                             val field = when (error.code) {
