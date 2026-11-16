@@ -1,5 +1,8 @@
 package com.example.roy.domain.map
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class Position(
     val latitude: Double,
     val longitude: Double,
@@ -11,6 +14,7 @@ data class Position(
 }
 
 /** A WGS84 rectangle that can be sent as a single Point API viewport. */
+@Serializable
 data class BoundingBox(
     val west: Double,
     val south: Double,

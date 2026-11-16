@@ -1,6 +1,7 @@
 package com.example.roy.presentation.chat
 
 import androidx.lifecycle.viewModelScope
+import com.example.roy.domain.offline.ChatCacheStore
 import com.example.roy.domain.auth.AuthErrorCode
 import com.example.roy.domain.auth.AuthResult
 import com.example.roy.domain.auth.SessionCoordinator
@@ -41,6 +42,7 @@ internal class TopicChatViewModel(
     connectivity: Flow<Boolean>,
     private val onResync: () -> Unit,
     private val onMeetingChange: (String?) -> Unit = {},
+    private val offlineCache: ChatCacheStore? = null,
 ) : BaseViewModel<TopicChatViewState, TopicChatViewEvent, TopicChatViewAction>(TopicChatViewState()) {
     private var loadJob: Job? = null
     private var earlyMessages = emptyList<ChatMessage>()
@@ -67,8 +69,16 @@ internal class TopicChatViewModel(
             connectivity.collect { online ->
                 if (isClosed || !scopeIsCurrent() || online == viewState.value.isOnline) return@collect
                 updateState { it.copy(isOnline = online, isLeaveDialogOpen = it.isLeaveDialogOpen && (online || it.isLeaving)) }
-                if (!online) stopRead()
-                else if (isResumed) recheckAccess()
+                if (!online) {
+                    stopRead()
+                    realtimeJob?.cancel()
+                    olderJob?.cancel()
+                    searchJob?.cancel()
+                    loadJob?.cancel()
+                    loadJob = null
+                    updateState { it.copy(search = null, isLoadingOlder = false) }
+                    if (isResumed) recheckAccess()
+                } else if (isResumed) onResume()
             }
         }
         viewModelScope.launch {
@@ -127,7 +137,7 @@ internal class TopicChatViewModel(
         isResumed = true
         if (isClosed || !scopeIsCurrent()) return
         if (!viewState.value.isLeaving) recheckAccess()
-        if (realtimeJob?.isActive == true) return
+        if (!viewState.value.isOnline || realtimeJob?.isActive == true) return
         realtimeJob = viewModelScope.launch {
             realtime().collect { event ->
                 when (event) {
@@ -138,6 +148,7 @@ internal class TopicChatViewModel(
                     }
                     is ChatRealtimeEvent.MessageCreated -> onCanonicalMessage(event.message)
                     is ChatRealtimeEvent.AccessLost -> verifyAccess()
+                    ChatRealtimeEvent.NotificationsChanged -> Unit
                     is ChatRealtimeEvent.MeetingChanged -> {
                         if (event.chatId == chatId) {
                             onMeetingChange(event.proposalId)
@@ -162,6 +173,7 @@ internal class TopicChatViewModel(
         stopRead()
         searchJob?.cancel()
         updateState { it.copy(isAccessUncertain = true, search = null, reportTarget = null, isLeaveDialogOpen = false) }
+        viewModelScope.launch { evictRoom() }
         recheckAccess()
     }
 
@@ -182,7 +194,9 @@ internal class TopicChatViewModel(
     }
 
     private suspend fun loadHistory(): Boolean {
+        if (!viewState.value.isOnline) return restoreOfflineHistory()
         val reply = sessions.readProtected(scopeId) { history.detail(chatId, it) }
+        if (reply is AuthResult.Failure && reply.error.code == AuthErrorCode.Network) return restoreOfflineHistory()
         val detail = readResult(reply, ::setHistoryError) ?: return false
         if (detail.pointId != pointId || detail.topicId != topicId) {
             accessLost(TopicChatIssue.Gone)
@@ -195,6 +209,7 @@ internal class TopicChatViewModel(
         val since = completeThrough
         if (since == null) {
             val replyPage = sessions.readProtected(scopeId) { history.history(chatId, it) }
+            if (replyPage is AuthResult.Failure && replyPage.error.code == AuthErrorCode.Network) return restoreOfflineHistory()
             val page = readResult(replyPage, ::setHistoryError) ?: return false
             completeThrough = maxOf(detail.lastMessageSeq, page.items.maxOfOrNull(ChatMessage::messageSeq) ?: 0L)
             val confirmed = mergeChatMessages(page.items, earlyMessages)
@@ -203,14 +218,56 @@ internal class TopicChatViewModel(
         } else {
             val newest = viewState.value.messages.firstOrNull()?.messageSeq ?: 0L
             val serverLast = maxOf(detail.lastMessageSeq, newest)
-            if (serverLast > since && !catchUp(since, serverLast)) return false
+            if (serverLast > since && !catchUp(since, serverLast)) {
+                if (viewState.value.historyIssue == TopicChatIssue.Network) restoreOfflineHistory()
+                return false
+            }
         }
         updateState { it.copy(
             detail = detail, isLoading = false, historyIssue = null,
+            cachedFetchedAt = null,
             accessCheck = it.accessCheck + 1,
             isAccessUncertain = it.isAccessUncertain && isResyncPending,
         ) }
+        saveRoom(refresh = since == null || (completeThrough ?: 0L) > since)
         return true
+    }
+
+    private suspend fun restoreOfflineHistory(): Boolean {
+        val cached = if (viewState.value.isAccessUncertain) null else offlineCache?.let { cache ->
+            sessions.withOfflineAccount(scopeId) { cache.readRoom(it, chatId) }
+        }?.takeIf { it.detail.pointId == pointId && it.detail.topicId == topicId }
+        currentCoroutineContext().ensureActive()
+        if (isClosed || !scopeIsCurrent() || viewState.value.isLeaving) return false
+        if (cached == null || viewState.value.isAccessUncertain) {
+            setHistoryError(TopicChatIssue.Network)
+        } else {
+            completeThrough = cached.detail.lastMessageSeq
+            updateState { it.copy(
+                detail = cached.detail, messages = cached.messages, isLoading = false,
+                cachedFetchedAt = cached.fetchedAt, historyIssue = null, search = null,
+                nextBeforeSeq = cached.nextBeforeSeq, olderIssue = null,
+            ) }
+        }
+        return false
+    }
+
+    private suspend fun saveRoom(refresh: Boolean) {
+        val cache = offlineCache ?: return
+        val state = viewState.value
+        val detail = state.detail ?: return
+        if (state.isAccessUncertain || state.cachedFetchedAt != null || isClosed) return
+        val complete = completeThrough ?: return
+        // The complete watermark excludes live events received beyond an unresolved history gap.
+        val messages = state.messages.filter { it.messageSeq <= complete }
+        sessions.withOfflineAccount(scopeId) {
+            cache.saveRoom(it, detail.copy(lastMessageSeq = complete), messages, state.nextBeforeSeq, refresh)
+        }
+    }
+
+    private suspend fun evictRoom() {
+        val cache = offlineCache ?: return
+        sessions.withOfflineAccount(scopeId) { cache.evictRoom(it, chatId) }
     }
 
     private fun setHistoryError(issue: TopicChatIssue) {
@@ -247,7 +304,7 @@ internal class TopicChatViewModel(
     private fun onLoadOlder() {
         val state = viewState.value
         val before = state.nextBeforeSeq ?: return
-        if (!state.canInteract || state.search != null || state.isLoadingOlder) return
+        if (!state.canInteract || !state.isOnline || state.search != null || state.isLoadingOlder) return
         updateState { it.copy(isLoadingOlder = true, olderIssue = null) }
         olderJob = viewModelScope.launch {
             val reply = sessions.readProtected(scopeId) { history.history(chatId, it, beforeSeq = before) }
@@ -260,6 +317,7 @@ internal class TopicChatViewModel(
                     isLoadingOlder = false,
                 )
             }
+            saveRoom(refresh = false)
         }
     }
 
@@ -383,6 +441,7 @@ internal class TopicChatViewModel(
                     currentCoroutineContext().ensureActive()
                     if (!scopeIsCurrent()) return@launch
                     closePrivateState(TopicChatIssue.NotMember, leaving = true)
+                    evictRoom()
                     sendAction(TopicChatViewAction.AccessLost(LeaveTopicResult(pointId, chatId, false)))
                     val pointGone = isPointGone()
                     currentCoroutineContext().ensureActive()
@@ -451,6 +510,7 @@ internal class TopicChatViewModel(
         // Stop rendering private data immediately. A public point read distinguishes a deleted
         // point from a live point whose chat access has been revoked.
         closePrivateState(issue)
+        evictRoom()
         sendAction(TopicChatViewAction.AccessLost(LeaveTopicResult(pointId, chatId, false)))
         val pointGone = isPointGone()
         currentCoroutineContext().ensureActive()

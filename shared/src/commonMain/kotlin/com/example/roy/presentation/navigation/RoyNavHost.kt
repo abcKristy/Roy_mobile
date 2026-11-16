@@ -59,6 +59,7 @@ internal fun RoyNavHost(
     protectedAuth: @Composable (Long) -> Unit,
     protectedTarget: @Composable () -> Unit,
     chats: @Composable () -> Unit,
+    notifications: @Composable (RoyRoute.Notifications) -> Unit = {},
 ) {
     val latestProfile by rememberUpdatedState(profile)
     val latestMap by rememberUpdatedState(map)
@@ -68,6 +69,7 @@ internal fun RoyNavHost(
     val latestAuth by rememberUpdatedState(protectedAuth)
     val latestTarget by rememberUpdatedState(protectedTarget)
     val latestChats by rememberUpdatedState(chats)
+    val latestNotifications by rememberUpdatedState(notifications)
     NavHost(navController = navController, startDestination = RoyRoute.Map, modifier = Modifier.fillMaxSize()) {
         composable<RoyRoute.Map> { latestMap() }
         composable<RoyRoute.MapFilters> { latestMapFilters() }
@@ -95,5 +97,6 @@ internal fun RoyNavHost(
         }
         composable<RoyRoute.Profile> { latestProfile() }
         composable<RoyRoute.Chats> { latestChats() }
+        composable<RoyRoute.Notifications> { latestNotifications(it.toRoute<RoyRoute.Notifications>()) }
     }
 }

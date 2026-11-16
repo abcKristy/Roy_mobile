@@ -90,6 +90,10 @@ internal class ChatRealtimeClient(
                         event.chatId
                     }
                     ChatRealtimeEvent.ChatsChanged, ChatRealtimeEvent.Resync -> null
+                    ChatRealtimeEvent.NotificationsChanged -> {
+                        if (observer.activeChat != null || observer.chatIds.isNotEmpty()) return@collect
+                        null
+                    }
                 }
                 if (chatId == null || chatId in observer.chatIds) send(event)
             }
@@ -283,6 +287,7 @@ internal class ChatRealtimeClient(
                 if (kind == MeetingChangeKind.ProposalUpdated && revision == null) return
                 emit(scopeId, ChatRealtimeEvent.MeetingChanged(room, proposalId, revision, kind))
             }
+            "notification.created" -> emit(scopeId, ChatRealtimeEvent.NotificationsChanged)
             "session.revoked" -> {
                 if (scope.field("kind") != "user") return
                 val userId = scope.field("id") ?: return

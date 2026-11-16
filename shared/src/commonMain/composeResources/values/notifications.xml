@@ -1,0 +1,25 @@
+<resources>
+    <string name="notifications_back">Назад</string>
+    <string name="notifications_center">Уведомления</string>
+    <string name="notifications_settings">Настройки уведомлений</string>
+    <string name="notifications_reminders">Push-напоминания о встречах</string>
+    <string name="notifications_personal">Личные push-уведомления</string>
+    <string name="notifications_nearby_push">Push о встречах рядом</string>
+    <string name="notifications_nearby_in_app">Встречи рядом в приложении</string>
+    <string name="notifications_permission_denied">Системное разрешение на уведомления выключено. Изменить его можно в настройках устройства.</string>
+    <string name="notifications_permission_not_asked">Разрешите системные уведомления, чтобы получать push на этом устройстве.</string>
+    <string name="notifications_permission_allow">Разрешить уведомления</string>
+    <string name="notifications_permission_settings">Настройки устройства</string>
+    <string name="notifications_permission_manage">Системные разрешения</string>
+    <string name="notifications_permission_later">Не сейчас</string>
+    <string name="notifications_loading">Загружаем уведомления</string>
+    <string name="notifications_saving">Сохраняем настройки</string>
+    <string name="notifications_empty">Уведомлений пока нет</string>
+    <string name="notifications_more">Показать ещё</string>
+    <string name="notifications_unread">Новое</string>
+    <string name="notifications_offline">Нет связи с сервером. Проверьте подключение.</string>
+    <string name="notifications_conflict">Настройки изменились на другом устройстве. Проверьте их перед изменением.</string>
+    <string name="notifications_invalid_cursor">Список обновился. Загрузите его заново.</string>
+    <string name="notifications_unavailable">Уведомления временно недоступны.</string>
+    <string name="notifications_target_unavailable">Связанная встреча или точка больше недоступна.</string>
+</resources>

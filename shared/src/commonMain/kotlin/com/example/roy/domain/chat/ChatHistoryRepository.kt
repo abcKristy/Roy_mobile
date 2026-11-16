@@ -2,6 +2,7 @@ package com.example.roy.domain.chat
 
 import com.example.roy.domain.auth.AuthResult
 import kotlin.time.Instant
+import kotlinx.serialization.Serializable
 
 internal interface ChatHistoryRepository {
     suspend fun detail(chatId: String, token: String): AuthResult<ChatReadReply<ChatDetail>>
@@ -25,6 +26,7 @@ internal sealed class ChatReadReply<out T> {
     data object Gone : ChatReadReply<Nothing>()
 }
 
+@Serializable
 internal data class ChatDetail(
     val id: String,
     val pointId: String,
@@ -38,6 +40,7 @@ internal data class ChatDetail(
     val currentProposalRevision: Long? = null,
 )
 
+@Serializable
 internal data class ChatMessage(
     val id: String,
     val chatId: String,
@@ -51,6 +54,7 @@ internal data class ChatMessage(
     val systemReason: String? = null,
 )
 
+@Serializable
 internal data class ChatMessageAuthor(val id: String?, val displayName: String, val avatarUrl: String?)
 internal data class ChatHistoryPage(val items: List<ChatMessage>, val nextBeforeSeq: Long?, val nextAfterSeq: Long?)
 internal data class ChatSearchPage(val items: List<ChatMessage>, val nextCursor: String?)

@@ -61,7 +61,8 @@ internal fun MapScreen(
     }
     BackHandler(enabled = state.selectedPointId != null) { eventHandler(MapViewEvent.PreviewClosed) }
     val dark = RoyTheme.isDark
-    val surface = remember(dark) { MapLibreSurface(MapStyleConfig.url(dark)) }
+    val isOffline = !state.isOnline || state.isUsingCache
+    val surface = remember(dark, isOffline) { MapLibreSurface(if (isOffline) null else MapStyleConfig.url(dark)) }
     val markers = state.points.map { point ->
         val topic = point.topics.singleOrNull()
         val label = if (topic == null) {
@@ -100,6 +101,7 @@ internal fun MapView(
     val surface = LocalMapSurface.current
     val spacing = RoyTheme.dimensions.spacing
     val uri = LocalUriHandler.current
+    val isOffline = !viewState.isOnline || viewState.isUsingCache
     Box(Modifier.fillMaxSize().background(RoyTheme.colors.background)) {
         key(surface, viewState.surfaceRevision) {
             surface.Content(
@@ -135,6 +137,7 @@ internal fun MapView(
                         if (viewState.createPosition == null) Res.string.protected_create else Res.string.map_create_here,
                     ),
                     onClick = { eventHandler(MapViewEvent.CreateRequested) },
+                    isEnabled = !isOffline,
                 )
                 MapLocationButton(
                     isLocating = viewState.isLocating,
@@ -157,7 +160,7 @@ internal fun MapView(
                         peopleLabel = pluralStringResource(Res.plurals.map_people, preview.point.peopleCount, preview.point.peopleCount),
                     ) {
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
-                            PointDetailsButton(isEnabled = true) { eventHandler(MapViewEvent.DetailsRequested) }
+                            PointDetailsButton(isEnabled = !isOffline) { eventHandler(MapViewEvent.DetailsRequested) }
                             TertiaryButton(stringResource(Res.string.map_close), { eventHandler(MapViewEvent.PreviewClosed) })
                         }
                     }
@@ -173,7 +176,7 @@ internal fun MapView(
                     null -> Unit
                 }
             }
-            MapAttribution(onOpenLink = { uri.openUri(it) })
+            if (!isOffline) MapAttribution(onOpenLink = { uri.openUri(it) })
         }
     }
 }

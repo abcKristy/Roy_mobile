@@ -16,16 +16,28 @@ internal fun chatConnectivity(context: Context): Flow<Boolean> = callbackFlow {
         close()
         return@callbackFlow
     }
-    fun publish() {
-        val capabilities = manager.getNetworkCapabilities(manager.activeNetwork)
-        trySend(capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true)
-    }
+    val initial = manager.getNetworkCapabilities(manager.activeNetwork)
+    trySend(initial?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true)
     val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) = publish()
-        override fun onLost(network: Network) = publish()
-        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) = publish()
+        private var defaultNetwork: Network? = null
+
+        override fun onAvailable(network: Network) {
+            defaultNetwork = network
+        }
+
+        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+            if (defaultNetwork == network) {
+                trySend(networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))
+            }
+        }
+
+        override fun onLost(network: Network) {
+            if (defaultNetwork == network) {
+                defaultNetwork = null
+                trySend(false)
+            }
+        }
     }
     manager.registerDefaultNetworkCallback(callback)
-    publish()
     awaitClose { manager.unregisterNetworkCallback(callback) }
 }.distinctUntilChanged()

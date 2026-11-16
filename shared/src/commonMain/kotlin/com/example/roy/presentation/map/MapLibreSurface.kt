@@ -43,7 +43,7 @@ import com.example.roy.presentation.theme.RoyTheme
 import org.maplibre.spatialk.geojson.Position as LibrePosition
 
 internal class MapLibreSurface(
-    private val styleUrl: String,
+    private val styleUrl: String?,
 ) : MapSurface {
     @Composable
     override fun Content(
@@ -56,7 +56,7 @@ internal class MapLibreSurface(
     ) {
         var useEmptyStyle by remember(styleUrl) { mutableStateOf(false) }
         val map = rememberMapState(
-            baseStyle = if (useEmptyStyle) BaseStyle.Empty else BaseStyle.Uri(styleUrl),
+            baseStyle = if (useEmptyStyle || styleUrl == null) BaseStyle.Empty else BaseStyle.Uri(styleUrl),
             initialCameraPosition = state.initialCamera.toLibreCamera(),
         )
         val viewportChanged by rememberUpdatedState(onViewportChanged)

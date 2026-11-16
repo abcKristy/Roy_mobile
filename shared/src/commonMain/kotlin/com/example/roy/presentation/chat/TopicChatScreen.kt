@@ -67,8 +67,10 @@ internal fun TopicChatScreen(
     }
     val chatAuthorized = viewerId != null && !viewState.isAccessUncertain && !viewState.isLeaving && !isMembershipDenied
     val isMeetingOverlayOpen = chatAuthorized && meetingState?.sheet != null
-    LaunchedEffect(meetings, chatAuthorized, viewerId, viewState.isOnline, viewState.accessCheck) {
-        meetingEvent?.invoke(MeetingViewEvent.OnAccessChanged(chatAuthorized, viewerId, viewState.isOnline))
+    LaunchedEffect(meetings, chatAuthorized, viewerId, viewState.isOnline, viewState.cachedFetchedAt, viewState.accessCheck) {
+        meetingEvent?.invoke(MeetingViewEvent.OnAccessChanged(
+            chatAuthorized, viewerId, viewState.isOnline && viewState.cachedFetchedAt == null,
+        ))
     }
     LaunchedEffect(viewModel, isMeetingOverlayOpen) {
         eventHandler(TopicChatViewEvent.OnMeetingOverlayChanged(isMeetingOverlayOpen))

@@ -6,6 +6,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.roy.App
 import com.example.roy.MeetingNotificationTarget
+import com.example.roy.domain.notifications.NotificationTarget
+import com.example.roy.push.PushRuntime
+import com.example.roy.data.offline.OfflineCache
+import com.example.roy.data.offline.androidOfflineCache
 import com.example.roy.data.auth.AndroidAuthHttpTransport
 import com.example.roy.data.auth.AndroidSessionStore
 import com.example.roy.data.auth.AuthHttpTransport
@@ -27,12 +31,20 @@ import com.example.roy.location.rememberAndroidDeviceLocation
 import com.example.roy.presentation.navigation.AuthReturnCoordinator
 
 @Composable
-fun RoyAndroidApp(context: Context, origin: String?, meetingTargets: Flow<MeetingNotificationTarget> = emptyFlow()) {
+fun RoyAndroidApp(
+    context: Context,
+    origin: String?,
+    meetingTargets: Flow<MeetingNotificationTarget> = emptyFlow(),
+    notificationTargets: Flow<NotificationTarget> = emptyFlow(),
+    pushRuntime: PushRuntime? = null,
+) {
     val model = viewModel {
         val apiOrigin = origin ?: "https://roy.invalid"
         val transport = AndroidAuthHttpTransport()
         val repository = AuthRemoteDataSource(apiOrigin, transport)
-        val session = SessionCoordinator(repository, AndroidSessionStore(context.applicationContext))
+        val cache = androidOfflineCache(context.applicationContext)
+        val session = SessionCoordinator(repository, AndroidSessionStore(context.applicationContext),
+            onPrivateSessionEnded = { cache.clearPrivate() }, allowOfflineRestore = true)
         val points = PointRemoteDataSource(apiOrigin, transport)
         val createPoints = CreatePointRemoteDataSource(apiOrigin, transport)
         val preferences = context.applicationContext.getSharedPreferences("roy_map", Context.MODE_PRIVATE)
@@ -48,6 +60,7 @@ fun RoyAndroidApp(context: Context, origin: String?, meetingTargets: Flow<Meetin
             points,
             createPoints,
             filterStore,
+            cache,
             PointDetailOperations(
                 LoadPoint(points), session, PointDetailRemoteDataSource(apiOrigin, transport), createPoints::getPresets,
             ),
@@ -56,7 +69,7 @@ fun RoyAndroidApp(context: Context, origin: String?, meetingTargets: Flow<Meetin
     App(
         model.session, model.points, rememberAndroidDeviceLocation(context), model.continuation,
         model.createPoints, model.pointDetails, model.filterStore, model.origin, model.transport, model.connectivity,
-        meetingTargets,
+        meetingTargets, notificationTargets, pushRuntime, model.offlineCache,
     )
 }
 
@@ -68,6 +81,7 @@ private class AndroidAppModel(
     val points: PointRepository,
     val createPoints: CreatePointRepository,
     val filterStore: PointFilterStore,
+    val offlineCache: OfflineCache,
     val pointDetails: PointDetailOperations,
 ) : ViewModel() {
     val continuation = AuthReturnCoordinator()

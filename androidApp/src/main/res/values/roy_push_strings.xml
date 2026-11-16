@@ -1,0 +1,5 @@
+<resources>
+    <string name="roy_push_channel">Уведомления Роя</string>
+    <string name="roy_push_reminder">Напоминание о встрече</string>
+    <string name="roy_push_generic">Новое уведомление</string>
+</resources>

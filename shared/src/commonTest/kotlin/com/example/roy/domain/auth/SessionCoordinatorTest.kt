@@ -51,6 +51,36 @@ class SessionCoordinatorTest {
         assertEquals(repository.first.user.id, store.saved?.user?.id)
         assertEquals(1, repository.profileReads)
     }
+
+    @Test
+    fun offlineColdStartExposesOnlyCachedIdentityUntilVerifiedAndClearsOnOfflineLogout() = runTest {
+        val repository = SessionTestRepository()
+        val store = SessionTestStore().apply { saved = repository.first }
+        var purges = 0
+        var mutations = 0
+        val session = SessionCoordinator(repository, store, { purges++ }, allowOfflineRestore = true)
+
+        session.setOnline(false)
+        session.restore()
+        val scope = assertIs<SessionStatus.Active>(session.state.value).scopeId
+        assertEquals(repository.user.id, session.cachedUser(scope)?.id)
+        assertEquals(0, repository.profileReads)
+        val rejected = session.mutateProtected(scope) { mutations++; AuthResult.Success(Unit) }
+        assertEquals(AuthErrorCode.Network, assertIs<AuthResult.Failure>(rejected).error.code)
+        assertEquals(0, mutations)
+
+        session.setOnline(true)
+        assertEquals(1, repository.profileReads)
+        assertIs<AuthResult.Success<Unit>>(session.mutateProtected(scope) { mutations++; AuthResult.Success(Unit) })
+        assertEquals(1, mutations)
+
+        session.setOnline(false)
+        assertIs<AuthResult.Success<Unit>>(session.logout())
+        assertEquals(SessionStatus.Guest, session.state.value)
+        assertEquals(null, session.cachedUser(scope))
+        assertEquals(null, store.saved)
+        assertEquals(1, purges)
+    }
 }
 
 internal class SessionTestStore : SessionStore {

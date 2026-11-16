@@ -15,6 +15,8 @@ import com.example.roy.domain.map.LoadPoint
 import com.example.roy.domain.points.PointDetailOperations
 import com.example.roy.location.IosDeviceLocation
 import com.example.roy.presentation.navigation.AuthReturnCoordinator
+import com.example.roy.data.offline.iosOfflineCache
+import com.example.roy.push.IosPush
 import androidx.compose.runtime.remember
 
 fun MainViewController(apiOrigin: String?) = ComposeUIViewController {
@@ -22,10 +24,13 @@ fun MainViewController(apiOrigin: String?) = ComposeUIViewController {
     val transport = remember { IosAuthHttpTransport() }
     val points = remember(origin) { PointRemoteDataSource(origin, transport) }
     val location = remember { IosDeviceLocation() }
+    val cache = remember { iosOfflineCache() }
     val session = remember(origin) {
         SessionCoordinator(
             AuthRemoteDataSource(origin, transport),
             IosSessionStore(),
+            onPrivateSessionEnded = { cache.clearPrivate() },
+            allowOfflineRestore = true,
         )
     }
     val continuation = remember(session) { AuthReturnCoordinator() }
@@ -41,5 +46,8 @@ fun MainViewController(apiOrigin: String?) = ComposeUIViewController {
         )
     }
     val connectivity = remember { chatConnectivity() }
-    App(session, points, location, continuation, createPoints, pointDetails, filterStore, origin, transport, connectivity)
+    App(
+        session, points, location, continuation, createPoints, pointDetails, filterStore, origin, transport, connectivity,
+        notificationTargets = IosPush.notificationTargets, pushRuntime = IosPush.runtime, offlineCache = cache,
+    )
 }

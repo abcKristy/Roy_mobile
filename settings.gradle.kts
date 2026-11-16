@@ -16,6 +16,12 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
+        maven("https://nexus-external.rustore.ru/repository/maven-rustore-exposed/") {
+            content {
+                includeGroupByRegex("ru\\.rustore(\\..*)?")
+                includeGroupByRegex("com\\.vk\\.push(\\..*)?")
+            }
+        }
         google {
             mavenContent {
                 includeGroupAndSubgroups("androidx")

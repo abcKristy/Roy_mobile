@@ -40,14 +40,15 @@ internal class IosAuthHttpTransport : AuthHttpTransport {
             AuthHttpMethod.Get -> "GET"
             AuthHttpMethod.Post -> "POST"
             AuthHttpMethod.Put -> "PUT"
+            AuthHttpMethod.Patch -> "PATCH"
             AuthHttpMethod.Delete -> "DELETE"
         })
         wireRequest.setValue("application/json", forHTTPHeaderField = "Accept")
         request.accessToken?.let { wireRequest.setValue("Bearer $it", forHTTPHeaderField = "Authorization") }
         request.headers.forEach { (name, value) -> wireRequest.setValue(value, forHTTPHeaderField = name) }
-        request.body?.let {
-            wireRequest.setValue("application/json", forHTTPHeaderField = "Content-Type")
-            val bytes = it.encodeToByteArray()
+        (request.requestBytes ?: request.body?.encodeToByteArray())?.let { bytes ->
+            wireRequest.setValue(request.requestContentType ?: "application/json", forHTTPHeaderField = "Content-Type")
+            if (bytes.isEmpty()) return@let
             wireRequest.setHTTPBody(bytes.usePinned { pinned ->
                 NSData.create(bytes = pinned.addressOf(0), length = bytes.size.toULong())
             })
@@ -95,6 +96,7 @@ internal class IosAuthHttpTransport : AuthHttpTransport {
                     retryAfter = it.headerValue("Retry-After"),
                     binaryBody = if (request.isBinaryResponseExpected && status == 200) body else null,
                     contentType = it.headerValue("Content-Type"),
+                    etag = it.headerValue("ETag"),
                 )
             }
             onComplete(response)

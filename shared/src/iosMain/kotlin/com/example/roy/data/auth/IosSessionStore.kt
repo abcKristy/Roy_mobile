@@ -40,7 +40,14 @@ import platform.Security.kSecReturnData
 import platform.Security.kSecValueData
 
 internal class IosSessionStore : SecureSessionStore() {
-    override suspend fun readRecord(): String? = withContext(Dispatchers.Default) {
+    private val record = IosSecureRecord("com.example.roy.session", "current-session")
+    override suspend fun readRecord() = record.read()
+    override suspend fun replaceRecord(record: String) = this.record.replace(record)
+    override suspend fun clearRecord() = record.clear()
+}
+
+internal class IosSecureRecord(private val service: String, private val account: String) {
+    suspend fun read(): String? = withContext(Dispatchers.Default) {
         memScoped {
             val result = alloc<CPointerVarOf<CFTypeRef>>()
             val fields = query + mapOf(
@@ -55,7 +62,7 @@ internal class IosSessionStore : SecureSessionStore() {
         }
     }
 
-    override suspend fun replaceRecord(record: String): Unit = withContext(Dispatchers.Default) {
+    suspend fun replace(record: String): Unit = withContext(Dispatchers.Default) {
         val bytes = record.encodeToByteArray()
         val data = bytes.usePinned {
             NSData.create(bytes = it.addressOf(0), length = bytes.size.toULong())
@@ -73,15 +80,15 @@ internal class IosSessionStore : SecureSessionStore() {
         }
     }
 
-    override suspend fun clearRecord(): Unit = withContext(Dispatchers.Default) {
+    suspend fun clear(): Unit = withContext(Dispatchers.Default) {
         val status = withDictionary(query, ::SecItemDelete)
         check(status == errSecSuccess || status == errSecItemNotFound)
     }
 
     private val query get() = mapOf(
         key(kSecClass) to key(kSecClassGenericPassword),
-        key(kSecAttrService) to "com.example.roy.session",
-        key(kSecAttrAccount) to "current-session",
+        key(kSecAttrService) to service,
+        key(kSecAttrAccount) to account,
     )
 
     private fun key(value: CFTypeRef?): String {

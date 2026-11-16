@@ -14,11 +14,20 @@ import com.example.roy.presentation.components.cards.RoyCard
 import com.example.roy.presentation.components.feedback.LoadingMode
 import com.example.roy.presentation.components.feedback.LoadingState
 import com.example.roy.presentation.theme.RoyTheme
+import com.example.roy.presentation.offline.OfflineStatus
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.*
 
 @Composable
 internal fun MapFeedback(state: MapViewState, eventHandler: (MapViewEvent) -> Unit) {
+    if (!state.isOnline || state.isUsingCache) {
+        OfflineStatus(state.fetchedAt)
+        MapStatus(stringResource(Res.string.offline_no_basemap), null, eventHandler)
+        if (state.viewport is ViewportContent.Failed && state.fetchedAt == null) {
+            MapStatus(stringResource(Res.string.offline_no_cache), MapViewEvent.RetryViewport, eventHandler)
+        }
+        return
+    }
     if (state.renderStatus == MapRenderStatus.Failed) {
         MapStatus(stringResource(Res.string.map_basemap_failed), MapViewEvent.RetryBasemap, eventHandler)
     }

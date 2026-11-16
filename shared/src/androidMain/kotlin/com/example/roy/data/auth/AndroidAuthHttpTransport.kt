@@ -26,9 +26,10 @@ internal class AndroidAuthHttpTransport : AuthHttpTransport {
             request.headers.forEach { (name, value) -> wireRequest.header(name, value) }
             when (request.method) {
                 AuthHttpMethod.Get -> wireRequest.get()
-                AuthHttpMethod.Post -> wireRequest.post(OneShotAuthBody(request.body))
-                AuthHttpMethod.Put -> wireRequest.put(OneShotAuthBody(request.body))
-                AuthHttpMethod.Delete -> wireRequest.delete(OneShotAuthBody(request.body))
+                AuthHttpMethod.Post -> wireRequest.post(OneShotAuthBody(request))
+                AuthHttpMethod.Put -> wireRequest.put(OneShotAuthBody(request))
+                AuthHttpMethod.Patch -> wireRequest.patch(OneShotAuthBody(request))
+                AuthHttpMethod.Delete -> wireRequest.delete(OneShotAuthBody(request))
             }
 
             val call = client.newCall(wireRequest.build())
@@ -48,6 +49,7 @@ internal class AndroidAuthHttpTransport : AuthHttpTransport {
                                 retryAfter = it.header("Retry-After"),
                                 binaryBody = if (request.isBinaryResponseExpected && it.isSuccessful) payload?.readByteArray() else null,
                                 contentType = it.header("Content-Type"),
+                                etag = it.header("ETag"),
                             )
                         }
                     } catch (_: IOException) {
@@ -58,9 +60,9 @@ internal class AndroidAuthHttpTransport : AuthHttpTransport {
             })
         }
 
-    private class OneShotAuthBody(json: String?) : RequestBody() {
-        private val bytes = json?.encodeToByteArray() ?: byteArrayOf()
-        private val mediaType = json?.let { "application/json".toMediaType() }
+    private class OneShotAuthBody(request: AuthHttpRequest) : RequestBody() {
+        private val bytes = request.requestBytes ?: request.body?.encodeToByteArray() ?: byteArrayOf()
+        private val mediaType = (request.requestContentType ?: request.body?.let { "application/json" })?.toMediaType()
         override fun contentType() = mediaType
         override fun contentLength() = bytes.size.toLong()
         override fun isOneShot() = true

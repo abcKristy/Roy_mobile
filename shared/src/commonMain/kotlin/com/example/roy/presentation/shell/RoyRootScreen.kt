@@ -7,6 +7,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
@@ -54,6 +58,19 @@ import com.example.roy.domain.meetings.MeetingRepository
 import com.example.roy.domain.meetings.MeetingVoterAvatarLoader
 import com.example.roy.presentation.meetings.MeetingViewModel
 import com.example.roy.domain.chat.ChatHistoryRepository
+import com.example.roy.domain.chat.ChatRealtimeEvent
+import com.example.roy.data.offline.OfflineCache
+import com.example.roy.data.notifications.PushRegistration
+import com.example.roy.domain.profile.ProfileRepository
+import com.example.roy.domain.notifications.NotificationRepository
+import com.example.roy.domain.notifications.NotificationTarget
+import com.example.roy.domain.notifications.PushPermission
+import com.example.roy.presentation.notifications.NotificationMode
+import com.example.roy.presentation.notifications.NotificationScreen
+import com.example.roy.presentation.notifications.NotificationViewModel
+import com.example.roy.presentation.profile.ProfileScreen
+import com.example.roy.presentation.profile.ProfileViewModel
+import com.example.roy.push.PushRuntime
 import com.example.roy.domain.chat.ChatReadReply
 import com.example.roy.domain.chat.ChatListOperations
 import com.example.roy.domain.chat.ChatReadCursor
@@ -96,6 +113,12 @@ internal fun RoyRootScreen(
     meetingAvatarsForScope: (Long) -> MeetingVoterAvatarLoader,
     connectivity: Flow<Boolean>,
     meetingTargets: Flow<MeetingNotificationTarget>,
+    notificationTargets: Flow<NotificationTarget>,
+    profiles: ProfileRepository,
+    notifications: NotificationRepository,
+    pushRuntime: PushRuntime?,
+    registration: PushRegistration?,
+    offlineCache: OfflineCache?,
     guestProfile: (@Composable () -> Unit)? = null,
 ) {
     val owner = remember {
@@ -112,8 +135,21 @@ internal fun RoyRootScreen(
     }
     DisposableEffect(chatsOwner) { onDispose { chatsOwner.viewModelStore.clear() } }
     val listModel = activeChatScope?.let { scopeId ->
-        viewModel(viewModelStoreOwner = chatsOwner) { ChatListViewModel(scopeId, chatList) }
+        viewModel(viewModelStoreOwner = chatsOwner) { ChatListViewModel(scopeId, chatList, offlineCache, session, connectivity) }
     }
+    val notificationModel = activeChatScope?.let { scopeId ->
+        viewModel(viewModelStoreOwner = chatsOwner) {
+            NotificationViewModel(scopeId, session, notifications, connectivity)
+        }
+    }
+    val profileModel = activeChatScope?.let { scopeId ->
+        viewModel(viewModelStoreOwner = chatsOwner) {
+            ProfileViewModel(scopeId, session, profiles, connectivity) { registration?.logout(scopeId) ?: session.logout() }
+        }
+    }
+    val latestNotificationModel by rememberUpdatedState(notificationModel)
+    val permission = pushRuntime?.authorization?.collectAsStateWithLifecycle()?.value
+        ?.let { PushPermission.valueOf(it.name) } ?: PushPermission.Denied
     val viewModel = viewModel(viewModelStoreOwner = owner) { RoyRootViewModel(session) }
     val operations by viewModel.viewState.collectAsStateWithLifecycle()
     val navController = rememberNavController()
@@ -123,7 +159,9 @@ internal fun RoyRootScreen(
     var changedPoint by remember { mutableStateOf<LeaveTopicResult?>(null) }
     val expiration by session.expiration.collectAsStateWithLifecycle()
     val mapModel = viewModel(viewModelStoreOwner = owner) {
-        MapViewModel(LoadViewport(points), LoadPoint(points), location, filterStore)
+        MapViewModel(LoadViewport(points), LoadPoint(points), location, filterStore, offlineCache, connectivity) {
+            latestNotificationModel?.onViewportSettled(it)
+        }
     }
     val goneMessage = stringResource(Res.string.map_point_gone)
     val eventHandler: (RoyRootViewEvent) -> Unit = remember(viewModel) { viewModel::handleEvent }
@@ -153,7 +191,7 @@ internal fun RoyRootScreen(
             is ProtectedNavigation.Continue -> {
                 if ((session.state.value as? SessionStatus.Active)?.scopeId != effect.scopeId) return
                 when (val intent = effect.intent) {
-                    is PendingProtectedIntent.CreatePoint, is PendingProtectedIntent.OpenMeeting -> {
+                    is PendingProtectedIntent.CreatePoint, is PendingProtectedIntent.OpenChatTarget -> {
                         continuation.showTarget(effect)
                         navController.navigate(RoyRoute.ProtectedTarget) { launchSingleTop = true }
                     }
@@ -186,10 +224,37 @@ internal fun RoyRootScreen(
     }
 
     var deferredMeeting by remember { mutableStateOf<Pair<Long?, MeetingNotificationTarget>?>(null) }
+    var deferredNotification by remember { mutableStateOf<Pair<Long?, NotificationTarget>?>(null) }
     LaunchedEffect(meetingTargets) {
         meetingTargets.collect { target ->
             deferredMeeting = (session.state.value as? SessionStatus.Active)?.scopeId to target
         }
+    }
+    LaunchedEffect(notificationTargets) {
+        notificationTargets.collect { target ->
+            deferredNotification = (session.state.value as? SessionStatus.Active)?.scopeId to target
+        }
+    }
+    fun openNotification(target: NotificationTarget) {
+        if (target.chatId == null) {
+            openPoint(RoyRoute.PointDetails(target.pointId))
+            return
+        }
+        navigate(continuation.request(
+            PendingProtectedIntent.OpenChatTarget(target.pointId, target.chatId, target.proposalId), session.state.value,
+        ))
+    }
+    LaunchedEffect(deferredNotification, backStackEntry, activeChatScope) {
+        val (scope, target) = deferredNotification ?: return@LaunchedEffect
+        if (scope != null && scope != activeChatScope) {
+            deferredNotification = null
+            return@LaunchedEffect
+        }
+        val destination = navController.currentDestination ?: return@LaunchedEffect
+        if (destination.hasRoute<RoyRoute.ProtectedTarget>() || destination.hasRoute<RoyRoute.ProtectedAuth>()) return@LaunchedEffect
+        deferredNotification = null
+        notificationModel?.markRead(target.notificationId)
+        openNotification(target)
     }
     LaunchedEffect(deferredMeeting, backStackEntry, activeChatScope) {
         val (scope, target) = deferredMeeting ?: return@LaunchedEffect
@@ -202,7 +267,9 @@ internal fun RoyRootScreen(
             return@LaunchedEffect
         }
         deferredMeeting = null
-        navigate(continuation.request(PendingProtectedIntent.OpenMeeting(target), session.state.value))
+        navigate(continuation.request(
+            PendingProtectedIntent.OpenChatTarget(target.pointId, target.chatId, target.proposalId), session.state.value,
+        ))
     }
 
     LaunchedEffect(backStackEntry) {
@@ -218,6 +285,7 @@ internal fun RoyRootScreen(
                     current?.hasRoute<RoyRoute.ProtectedTarget>() != true &&
                     current?.hasRoute<RoyRoute.MapFilters>() != true &&
                     current?.hasRoute<RoyRoute.PointDetails>() != true &&
+                    current?.hasRoute<RoyRoute.Notifications>() != true &&
                     current?.hasRoute<RoyRoute.TopicChat>() != true
                 ) navController.openTab(action.tab)
             }
@@ -233,6 +301,7 @@ internal fun RoyRootScreen(
                 destination?.hasRoute<RoyRoute.ProtectedTarget>() != true &&
                 destination?.hasRoute<RoyRoute.MapFilters>() != true &&
                 destination?.hasRoute<RoyRoute.PointDetails>() != true &&
+                destination?.hasRoute<RoyRoute.Notifications>() != true &&
                 destination?.hasRoute<RoyRoute.TopicChat>() != true
             ) {
                 RoyRootView(
@@ -248,6 +317,11 @@ internal fun RoyRootScreen(
                     when {
                         guestProfile != null -> guestProfile()
                         sessionStatus == SessionStatus.Guest -> AuthNavHost(session)
+                        profileModel != null -> ProfileScreen(
+                            profileModel,
+                            onOpenNotifications = { navController.navigate(RoyRoute.Notifications()) },
+                            onOpenNotificationSettings = { navController.navigate(RoyRoute.Notifications(settings = true)) },
+                        )
                         else -> ProfileSessionView(operations, eventHandler)
                     }
                 },
@@ -346,6 +420,7 @@ internal fun RoyRootScreen(
                                 { chatRealtime.events(route.scopeId, route.chatId) }, connectivity,
                                 { listModel?.handleEvent(ChatListViewEvent.Refresh) },
                                 meetingModel::onRealtimeChange,
+                                offlineCache,
                             )
                         }
                         fun onMembershipChanged(result: LeaveTopicResult) {
@@ -418,7 +493,7 @@ internal fun RoyRootScreen(
                 protectedTarget = {
                     val current = continuation.currentTarget
                     val intent = current?.intent as? PendingProtectedIntent.CreatePoint
-                    val meeting = (current?.intent as? PendingProtectedIntent.OpenMeeting)?.target
+                    val meeting = current?.intent as? PendingProtectedIntent.OpenChatTarget
                     if (current != null && meeting != null && sessionStatus == SessionStatus.Active(current.scopeId)) {
                         var retry by remember(current) { mutableLongStateOf(0L) }
                         var failed by remember(current) { mutableStateOf(false) }
@@ -507,6 +582,31 @@ internal fun RoyRootScreen(
                                 ) openChat(row.pointId, row.topicId, row.chatId)
                             },
                             onOpenMap = openMap,
+                        )
+                    }
+                },
+                notifications = { route ->
+                    if (notificationModel == null) {
+                        LaunchedEffect(sessionStatus) { navController.popBackStack() }
+                    } else {
+                        val lifecycle = LocalLifecycleOwner.current.lifecycle
+                        LaunchedEffect(lifecycle, activeChatScope, route.settings) {
+                            val scopeId = activeChatScope ?: return@LaunchedEffect
+                            if (!route.settings) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                                chatRealtime.events(scopeId).collect { event ->
+                                    if (event == ChatRealtimeEvent.NotificationsChanged || event == ChatRealtimeEvent.Resync) {
+                                        notificationModel.invalidateCenter()
+                                    }
+                                }
+                            }
+                        }
+                        NotificationScreen(
+                            notificationModel,
+                            if (route.settings) NotificationMode.Settings else NotificationMode.Center,
+                            permission,
+                            onRequestPermission = { pushRuntime?.requestPermission() },
+                            onBack = { navController.popBackStack() },
+                            onOpenTarget = ::openNotification,
                         )
                     }
                 },

@@ -3,6 +3,7 @@ package com.example.roy.presentation.chat
 import androidx.compose.runtime.Immutable
 import com.example.roy.domain.chat.ChatDetail
 import com.example.roy.domain.chat.ChatMessage
+import kotlin.time.Instant
 
 @Immutable
 internal data class TopicChatViewState(
@@ -21,8 +22,10 @@ internal data class TopicChatViewState(
     val isLeaving: Boolean = false,
     val reportTarget: ChatReportTarget? = null,
     val composer: ChatComposerState = ChatComposerState(),
+    val cachedFetchedAt: Instant? = null,
 ) {
-    val canInteract: Boolean get() = detail != null && historyIssue == null && !isLoading && !isLeaving && !isAccessUncertain
+    val canInteract: Boolean get() = detail != null && historyIssue == null && cachedFetchedAt == null &&
+        !isLoading && !isLeaving && !isAccessUncertain
 }
 
 @Immutable

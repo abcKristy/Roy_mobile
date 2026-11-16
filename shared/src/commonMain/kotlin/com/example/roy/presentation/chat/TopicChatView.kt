@@ -24,6 +24,7 @@ import com.example.roy.presentation.components.feedback.ErrorState
 import com.example.roy.presentation.components.feedback.LoadingMode
 import com.example.roy.presentation.components.feedback.LoadingState
 import com.example.roy.presentation.theme.RoyTheme
+import com.example.roy.presentation.offline.OfflineStatus
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.Res
 import roy.shared.generated.resources.chat_empty
@@ -32,6 +33,7 @@ import roy.shared.generated.resources.chat_leave
 import roy.shared.generated.resources.chat_search
 import roy.shared.generated.resources.protected_back
 import roy.shared.generated.resources.chat_title
+import roy.shared.generated.resources.offline_no_cache
 
 @Composable
 internal fun TopicChatView(
@@ -47,6 +49,7 @@ internal fun TopicChatView(
     val spacing = RoyTheme.dimensions.spacing
     val listState = rememberLazyListState()
     val visibleDetail = viewState.detail.takeUnless { viewState.isAccessUncertain }
+    val isOffline = !viewState.isOnline || viewState.historyIssue == TopicChatIssue.Network || viewState.cachedFetchedAt != null
     Column(
         modifier = Modifier.fillMaxSize().background(colors.background)
             .navigationBarsPadding().imePadding().padding(horizontal = spacing.medium),
@@ -61,6 +64,7 @@ internal fun TopicChatView(
             style = typography.headingMedium.copy(color = colors.textPrimary),
             modifier = Modifier.semantics { heading() },
         )
+        if (isOffline) OfflineStatus(viewState.cachedFetchedAt)
         visibleDetail?.let { chat ->
             BasicText(chat.address, style = typography.bodySmall.copy(color = colors.textSecondary))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
@@ -98,7 +102,9 @@ internal fun TopicChatView(
                     val issue = viewState.historyIssue
                     val mayRetry = issue == TopicChatIssue.Network || issue == TopicChatIssue.Unavailable
                     if (mayRetry) {
-                        ErrorState(stringResource(issue.stringResource), true, { eventHandler(TopicChatViewEvent.OnRetry) })
+                        val message = if (issue == TopicChatIssue.Network && visibleDetail == null) Res.string.offline_no_cache
+                            else issue.stringResource
+                        ErrorState(stringResource(message), true, { eventHandler(TopicChatViewEvent.OnRetry) })
                     } else {
                         BasicText(
                             text = stringResource(issue.stringResource),

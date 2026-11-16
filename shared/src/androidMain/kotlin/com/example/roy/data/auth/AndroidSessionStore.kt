@@ -15,10 +15,17 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 internal class AndroidSessionStore(context: Context) : SecureSessionStore() {
-    private val file = AtomicFile(File(context.noBackupFilesDir, "roy-session"))
+    private val record = AndroidSecureRecord(context, "roy-session", "roy-session-key")
+    override suspend fun readRecord() = record.read()
+    override suspend fun replaceRecord(record: String) = this.record.replace(record)
+    override suspend fun clearRecord() = record.clear()
+}
+
+internal class AndroidSecureRecord(context: Context, filename: String, private val alias: String) {
+    private val file = AtomicFile(File(context.noBackupFilesDir, filename))
     private val keyStore by lazy { KeyStore.getInstance("AndroidKeyStore").apply { load(null) } }
 
-    override suspend fun readRecord(): String? = withContext(Dispatchers.IO) {
+    suspend fun read(): String? = withContext(Dispatchers.IO) {
         val encrypted = try {
             file.readFully()
         } catch (missing: FileNotFoundException) {
@@ -27,14 +34,14 @@ internal class AndroidSessionStore(context: Context) : SecureSessionStore() {
         }
         if (encrypted.contentEquals(ClearedRecord)) return@withContext null
         check(encrypted.size > IvSize)
-        val key = checkNotNull(keyStore.getKey(Alias, null) as? SecretKey)
+        val key = checkNotNull(keyStore.getKey(alias, null) as? SecretKey)
         val cipher = Cipher.getInstance(Transformation)
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TagBits, encrypted, 0, IvSize))
         cipher.doFinal(encrypted, IvSize, encrypted.size - IvSize).decodeToString(throwOnInvalidSequence = true)
     }
 
-    override suspend fun replaceRecord(record: String): Unit = withContext(Dispatchers.IO) {
-        val key = keyStore.getKey(Alias, null) as? SecretKey ?: generateKey()
+    suspend fun replace(record: String): Unit = withContext(Dispatchers.IO) {
+        val key = keyStore.getKey(alias, null) as? SecretKey ?: generateKey()
         val cipher = Cipher.getInstance(Transformation)
         cipher.init(Cipher.ENCRYPT_MODE, key)
         check(cipher.iv.size == IvSize)
@@ -51,7 +58,7 @@ internal class AndroidSessionStore(context: Context) : SecureSessionStore() {
         check(file.readFully().contentEquals(encrypted))
     }
 
-    override suspend fun clearRecord(): Unit = withContext(Dispatchers.IO) {
+    suspend fun clear(): Unit = withContext(Dispatchers.IO) {
         // Overwrite the prior record atomically first, so a failed delete cannot restore a session.
         val stream = file.startWrite()
         try {
@@ -70,7 +77,7 @@ internal class AndroidSessionStore(context: Context) : SecureSessionStore() {
         .getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         .apply {
             init(
-                KeyGenParameterSpec.Builder(Alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                     .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                     .build(),
@@ -79,7 +86,6 @@ internal class AndroidSessionStore(context: Context) : SecureSessionStore() {
         .generateKey()
 
     private companion object {
-        const val Alias = "roy-session-key"
         const val Transformation = "AES/GCM/NoPadding"
         const val IvSize = 12
         const val TagBits = 128

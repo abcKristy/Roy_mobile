@@ -4,6 +4,7 @@ internal enum class AuthHttpMethod {
     Get,
     Post,
     Put,
+    Patch,
     Delete,
 }
 
@@ -15,6 +16,8 @@ internal class AuthHttpRequest(
     val maxResponseBytes: Int = MaxAuthResponseBytes,
     val headers: Map<String, String> = emptyMap(),
     val isBinaryResponseExpected: Boolean = false,
+    val requestBytes: ByteArray? = null,
+    val requestContentType: String? = null,
 )
 
 internal class AuthHttpResponse(
@@ -23,6 +26,7 @@ internal class AuthHttpResponse(
     val retryAfter: String? = null,
     val binaryBody: ByteArray? = null,
     val contentType: String? = null,
+    val etag: String? = null,
 )
 
 /** Returns null when no HTTP response is available. Implementations never follow redirects. */

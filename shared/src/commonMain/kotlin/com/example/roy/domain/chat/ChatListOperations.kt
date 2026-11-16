@@ -7,7 +7,9 @@ import com.example.roy.domain.auth.SessionCoordinator
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Instant
+import kotlinx.serialization.Serializable
 
+@Serializable
 internal data class ChatListItem(
     val chatId: String,
     val pointId: String,

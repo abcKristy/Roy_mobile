@@ -20,6 +20,8 @@ internal sealed interface SessionStatus {
 internal class SessionCoordinator(
     private val repository: AuthRepository,
     private val store: SessionStore,
+    private val onPrivateSessionEnded: suspend () -> Unit = {},
+    private val allowOfflineRestore: Boolean = false,
 ) {
     private val gate = Mutex()
     private val restoreGate = Mutex()
@@ -32,10 +34,37 @@ internal class SessionCoordinator(
     private var readWave = ReadWave()
     private var inFlight: CompletableDeferred<AuthResult<AuthSession>>? = null
     private var uncommitted: AuthSession? = null
+    private var online = true
+    private var requiresReconnectVerification = false
 
     val state = status.asStateFlow()
     private val expirationId = MutableStateFlow(0L)
     val expiration = expirationId.asStateFlow()
+
+    suspend fun setOnline(value: Boolean) {
+        gate.withLock { online = value }
+        if (!value) return
+        restoreGate.withLock {
+            val expected = gate.withLock {
+                (status.value as? SessionStatus.Active)?.takeIf { requiresReconnectVerification && online }
+            } ?: return@withLock
+            val result = currentUser(expected.scopeId)
+            if (result is AuthResult.Success) gate.withLock {
+                if (status.value == expected && session?.user?.id == result.value.id && online) {
+                    requiresReconnectVerification = false
+                }
+            }
+        }
+    }
+
+    suspend fun <T> withOfflineAccount(expectedScopeId: Long, use: suspend (String) -> T): T? = gate.withLock {
+        if (closing || status.value != SessionStatus.Active(expectedScopeId)) return@withLock null
+        session?.user?.id?.let { use(it) }
+    }
+
+    suspend fun cachedUser(expectedScopeId: Long): AuthUser? = gate.withLock {
+        session?.user?.takeIf { !closing && status.value == SessionStatus.Active(expectedScopeId) }
+    }
 
     suspend fun restore(): Unit = restoreGate.withLock {
         val saved = gate.withLock {
@@ -73,6 +102,11 @@ internal class SessionCoordinator(
             }
             is AuthResult.Failure -> gate.withLock {
                 if (session != null) {
+                    if (allowOfflineRestore && result.error.code == AuthErrorCode.Network) {
+                        requiresReconnectVerification = true
+                        status.value = SessionStatus.Active(scopeId)
+                        return@withLock
+                    }
                     status.value = if (result.error.code == AuthErrorCode.Storage) {
                         SessionStatus.StorageUnavailable
                     } else {
@@ -85,6 +119,7 @@ internal class SessionCoordinator(
 
     suspend fun authenticate(credentials: AuthCredentials): AuthResult<Unit> = gate.withLock {
         if (closing || status.value != SessionStatus.Guest) return AuthResult.Failure(AuthError(AuthErrorCode.UnexpectedResponse))
+        if (!online) return networkUnavailable()
         val result = when (credentials) {
             is AuthCredentials.Login -> repository.login(credentials)
             is AuthCredentials.Register -> repository.register(credentials)
@@ -116,6 +151,7 @@ internal class SessionCoordinator(
         val (observed, observedScope, wave) = gate.withLock {
             if (expectedScopeId != null && status.value != SessionStatus.Active(expectedScopeId)) return expired()
             val current = session?.takeUnless { closing } ?: return expired()
+            if (!online) return networkUnavailable()
             if (readWave.result?.isCompleted == true) readWave = ReadWave()
             Triple(current, scopeId, readWave)
         }
@@ -146,6 +182,7 @@ internal class SessionCoordinator(
         val (observed, wave) = gate.withLock {
             if (status.value != SessionStatus.Active(expectedScopeId)) return expired()
             val current = session?.takeUnless { closing } ?: return expired()
+            if (!online || requiresReconnectVerification) return networkUnavailable()
             if (readWave.result?.isCompleted == true) readWave = ReadWave()
             current to readWave
         }
@@ -164,9 +201,18 @@ internal class SessionCoordinator(
         }
     }
 
+    suspend fun completeRevokedProfileSession(expectedScopeId: Long, userId: String, expired: Boolean): AuthResult<Unit> =
+        gate.withLock {
+            if (closing || status.value != SessionStatus.Active(expectedScopeId) || session?.user?.id != userId) {
+                return@withLock this.expired()
+            }
+            endSession(expired)
+        }
+
     suspend fun logout(): AuthResult<Unit> = logoutGate.withLock {
         val closingScope = gate.withLock {
             if (session == null) return AuthResult.Success(Unit)
+            if (!online || requiresReconnectVerification) return endSession()
             closing = true
             scopeId
         }
@@ -275,9 +321,11 @@ internal class SessionCoordinator(
         session = null
         readWave = ReadWave()
         uncommitted = null
+        requiresReconnectVerification = false
         scopeId++
         try {
             store.clear()
+            onPrivateSessionEnded()
             pendingClear = false
             status.value = SessionStatus.Guest
             if (expired) expirationId.value++
@@ -291,6 +339,7 @@ internal class SessionCoordinator(
 
     private fun expired() = AuthResult.Failure(AuthError(AuthErrorCode.SessionExpired))
     private fun storageFailure() = AuthResult.Failure(AuthError(AuthErrorCode.Storage))
+    private fun networkUnavailable() = AuthResult.Failure(AuthError(AuthErrorCode.Network))
 }
 
 private fun AuthResult<*>.isTerminalAccess() = this is AuthResult.Failure &&

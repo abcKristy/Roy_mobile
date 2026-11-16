@@ -3,6 +3,7 @@ package com.example.roy.domain.map
 import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
+@Serializable
 internal data class Point(
     val id: String,
     val position: Position,
@@ -14,6 +15,7 @@ internal data class Point(
     val updatedAt: Instant,
 )
 
+@Serializable
 internal data class PointTopic(
     val id: String,
     val presetKey: String,
@@ -34,6 +36,7 @@ internal data class PointFilter(
             (peopleMin ?: 0) != 0 || (peopleMax ?: 50) != 50
 }
 
+@Serializable
 internal data class ViewportQuery(
     val bbox: BoundingBox,
     val filter: PointFilter = PointFilter(),

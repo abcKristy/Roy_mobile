@@ -14,6 +14,7 @@ dependencies {
     implementation(project(":shared"))
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.rustore.push)
 
     implementation(libs.compose.ui)
     implementation(libs.compose.uiToolingPreview)
@@ -27,6 +28,9 @@ android {
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
+        val pushProject = providers.gradleProperty("royRuStoreProjectId").orElse("").get()
+        require(pushProject.matches(Regex("[A-Za-z0-9_-]*"))) { "Invalid RuStore project ID" }
+        buildConfigField("String", "RUSTORE_PROJECT_ID", "\"$pushProject\"")
         applicationId = "com.example.roy"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
@@ -53,5 +57,6 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }

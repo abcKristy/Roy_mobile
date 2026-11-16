@@ -55,6 +55,7 @@ import com.example.roy.presentation.core.CollectMviActions
 import com.example.roy.presentation.map.mapTopicIcon
 import com.example.roy.presentation.core.formatLocalDateTime
 import com.example.roy.presentation.theme.RoyTheme
+import com.example.roy.presentation.offline.OfflineStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -71,6 +72,7 @@ import roy.shared.generated.resources.empty_chats_body
 import roy.shared.generated.resources.empty_chats_open_map
 import roy.shared.generated.resources.empty_chats_title
 import roy.shared.generated.resources.tab_chats
+import roy.shared.generated.resources.offline_no_cache
 
 @Composable
 internal fun ChatListScreen(
@@ -111,7 +113,8 @@ internal fun ChatListView(
     eventHandler: (ChatListViewEvent) -> Unit,
 ) {
     val spacing = RoyTheme.dimensions.spacing
-    if (viewState.rows.isEmpty()) {
+    val isOffline = !viewState.isOnline || viewState.cachedFetchedAt != null || viewState.error == AuthErrorCode.Network
+    if (viewState.rows.isEmpty() && !isOffline) {
         when {
             viewState.isLoading -> LoadingState(LoadingMode.Fullscreen, stringResource(Res.string.chat_list_loading))
             viewState.error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -133,6 +136,7 @@ internal fun ChatListView(
                 style = RoyTheme.typography.headingMedium.copy(color = RoyTheme.colors.textPrimary),
             )
         }
+        if (isOffline) item { OfflineStatus(viewState.cachedFetchedAt) }
         items(viewState.rows, key = { it.chatId }) { row ->
             ChatListRow(row) { eventHandler(ChatListViewEvent.OpenChat(row.chatId)) }
         }
@@ -140,9 +144,14 @@ internal fun ChatListView(
             when {
                 viewState.isLoading -> LoadingState(LoadingMode.Inline, stringResource(Res.string.chat_list_loading))
                 viewState.error != null -> ErrorState(
-                    chatListError(viewState.error), true, { eventHandler(ChatListViewEvent.Retry) },
+                    if (isOffline && viewState.rows.isEmpty()) stringResource(Res.string.offline_no_cache) else chatListError(viewState.error),
+                    true, { eventHandler(ChatListViewEvent.Retry) },
                 )
-                viewState.nextCursor != null -> SecondaryButton(
+                viewState.rows.isEmpty() -> BasicText(
+                    stringResource(Res.string.empty_chats_title),
+                    style = RoyTheme.typography.body.copy(color = RoyTheme.colors.textSecondary),
+                )
+                viewState.nextCursor != null && !isOffline -> SecondaryButton(
                     text = stringResource(Res.string.chat_list_load_more),
                     onClick = { eventHandler(ChatListViewEvent.LoadMore) },
                     modifier = Modifier.fillMaxWidth(),
