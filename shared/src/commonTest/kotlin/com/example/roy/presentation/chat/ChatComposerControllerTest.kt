@@ -4,6 +4,7 @@ import com.example.roy.domain.auth.AuthCredentials
 import com.example.roy.domain.auth.AuthError
 import com.example.roy.domain.auth.AuthErrorCode
 import com.example.roy.domain.auth.AuthResult
+import com.example.roy.domain.auth.AuthUser
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.SessionStatus
 import com.example.roy.domain.auth.SessionTestRepository
@@ -94,10 +95,90 @@ class ChatComposerControllerTest {
         assertEquals("Текст", fixture.controller.state.value.text)
         assertEquals(listOf(acceptedMessage), fixture.sent)
     }
+
+    @Test
+    fun expiredMuteRemainsBlockedUntilServerReadAndNeverReplaysDraft() = runTest {
+        val fixture = composerFixture()
+        val deadline = Instant.fromEpochMilliseconds(2_000)
+        val mutedProfile = AuthResult.Success(fixture.auth.user.withMute(deadline))
+        fixture.auth.profile = { mutedProfile }
+        fixture.controller.edit("Сообщение в черновике")
+        fixture.controller.syncProfile()
+        runCurrent()
+        assertEquals(deadline, fixture.controller.state.value.mutedUntil)
+
+        fixture.auth.profile = { AuthResult.Failure(AuthError(AuthErrorCode.Network)) }
+        advanceTimeBy(2.seconds)
+        runCurrent()
+        assertEquals(2, fixture.auth.profileReads)
+        assertFalse(fixture.controller.state.value.canSend)
+        fixture.controller.send()
+
+        fixture.auth.profile = { mutedProfile }
+        advanceTimeBy(29.seconds)
+        runCurrent()
+        assertEquals(2, fixture.auth.profileReads)
+        advanceTimeBy(1.seconds)
+        runCurrent()
+        assertEquals(3, fixture.auth.profileReads)
+        assertTrue(fixture.controller.state.value.canSend)
+        assertEquals(null, fixture.controller.state.value.mutedUntil)
+        assertEquals("Сообщение в черновике", fixture.controller.state.value.text)
+        assertTrue(fixture.writer.attempts.isEmpty())
+    }
+
+    @Test
+    fun delayedProfileCannotOverwriteNewerMuteFromSend() = runTest {
+        val fixture = composerFixture()
+        val oldDeadline = Instant.fromEpochMilliseconds(3_000)
+        val newerDeadline = Instant.fromEpochMilliseconds(5_000)
+        val pending = CompletableDeferred<AuthResult<AuthUser>>()
+        fixture.auth.profile = { pending.await() }
+        fixture.controller.syncProfile()
+        runCurrent()
+
+        fixture.writer.reply = { AuthResult.Success(ChatSendReply.Muted(newerDeadline)) }
+        fixture.controller.edit("Попытка отправки")
+        fixture.controller.send()
+        runCurrent()
+        pending.complete(AuthResult.Success(fixture.auth.user.withMute(oldDeadline)))
+        runCurrent()
+        assertEquals(newerDeadline, fixture.controller.state.value.mutedUntil)
+        assertFalse(fixture.controller.state.value.canSend)
+        assertEquals(1, fixture.writer.attempts.size)
+    }
+
+    @Test
+    fun profileStartedBeforeExpiryCannotLiftMuteAfterExpiry() = runTest {
+        val fixture = composerFixture()
+        val deadline = Instant.fromEpochMilliseconds(2_000)
+        val mutedProfile = AuthResult.Success(fixture.auth.user.withMute(deadline))
+        fixture.auth.profile = { mutedProfile }
+        fixture.controller.edit("Черновик")
+        fixture.controller.syncProfile()
+        runCurrent()
+
+        val pending = CompletableDeferred<AuthResult<AuthUser>>()
+        fixture.auth.profile = { pending.await() }
+        fixture.controller.syncProfile()
+        runCurrent()
+        advanceTimeBy(2.seconds)
+        runCurrent()
+        pending.complete(mutedProfile)
+        runCurrent()
+        assertFalse(fixture.controller.state.value.canSend)
+
+        fixture.auth.profile = { mutedProfile }
+        fixture.controller.syncProfile()
+        runCurrent()
+        assertTrue(fixture.controller.state.value.canSend)
+        assertTrue(fixture.writer.attempts.isEmpty())
+    }
 }
 
 private suspend fun TestScope.composerFixture(): ComposerFixture {
-    val sessions = SessionCoordinator(SessionTestRepository(), SessionTestStore())
+    val auth = SessionTestRepository()
+    val sessions = SessionCoordinator(auth, SessionTestStore())
     sessions.restore()
     sessions.authenticate(AuthCredentials.Login("fixture", "fixture"))
     val sessionId = (sessions.state.value as SessionStatus.Active).scopeId
@@ -118,14 +199,18 @@ private suspend fun TestScope.composerFixture(): ComposerFixture {
         clock = clock,
         newKey = { "key-${++next}" },
     )
-    return ComposerFixture(controller, writer, sent)
+    return ComposerFixture(controller, writer, sent, auth)
 }
 
 private data class ComposerFixture(
     val controller: ChatComposerController,
     val writer: ComposerTestWriter,
     val sent: List<ChatMessage>,
+    val auth: SessionTestRepository,
 )
+
+private fun AuthUser.withMute(until: Instant): AuthUser =
+    AuthUser(id, displayName, avatarUrl, phone, ageYears, until, createdAt)
 
 private class ComposerTestWriter : ChatWriteRepository {
     val attempts = mutableListOf<Pair<String, String>>()

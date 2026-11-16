@@ -59,7 +59,9 @@ internal class ChatComposerController(
     private var retryable: SendAttempt? = null
     private var floodUntil: Instant? = null
     private var mutedUntil: Instant? = null
+    private var muteRevision = 0L
     private var countdown: Job? = null
+    private var muteCheck: Job? = null
     private var profile: Job? = null
     private var sending: Job? = null
     private var revoked = false
@@ -118,9 +120,15 @@ internal class ChatComposerController(
         refreshClock()
         if (profile?.isActive == true) return
         profile = scope.launch {
+            val requestedAt = clock.now()
+            val observedMuteRevision = muteRevision
             val result = sessions.currentUser(scopeId)
-            if (active && result is AuthResult.Success) {
-                result.value.messageMutedUntil?.let(::applyMute)
+            if (active && observedMuteRevision == muteRevision && result is AuthResult.Success) {
+                val reportedUntil = result.value.messageMutedUntil?.takeIf { it > clock.now() }
+                // The server retains the old date. A read started before expiry cannot lift the mute.
+                if (reportedUntil != null || mutedUntil?.let { requestedAt >= it } != false) {
+                    setMute(reportedUntil)
+                }
             }
         }
     }
@@ -130,6 +138,7 @@ internal class ChatComposerController(
         sending?.cancel()
         profile?.cancel()
         countdown?.cancel()
+        muteCheck?.cancel()
         retryable = null
         mutableState.value = ChatComposerState()
     }
@@ -145,7 +154,8 @@ internal class ChatComposerController(
                 null
             }
             is ChatSendReply.Muted -> {
-                applyMute(reply.until)
+                muteRevision++
+                setMute(maxOf(mutedUntil ?: reply.until, reply.until))
                 null
             }
             is ChatSendReply.Flood -> {
@@ -170,19 +180,32 @@ internal class ChatComposerController(
         if (issue != null && draftMatches) mutableState.value = state.value.copy(issue = issue)
     }
 
-    private fun applyMute(until: Instant) {
-        mutedUntil = maxOf(mutedUntil ?: until, until)
-        startCountdown()
+    private fun setMute(until: Instant?) {
+        if (mutedUntil == until) return
+        mutedUntil = until
+        mutableState.value = state.value.copy(mutedUntil = until)
+        muteCheck?.cancel()
+        muteCheck = until?.let { deadline ->
+            scope.launch {
+                while (active && mutedUntil == deadline) {
+                    val remaining = deadline - clock.now()
+                    if (remaining.isPositive()) {
+                        delay(remaining)
+                    } else {
+                        syncProfile()
+                        delay(30.seconds)
+                    }
+                }
+            }
+        }
     }
 
     private fun startCountdown() {
         refreshClock()
         if (countdown?.isActive == true) return
         countdown = scope.launch {
-            while (active && (state.value.mutedUntil != null || state.value.retryAfterSeconds > 0)) {
-                val wait = if (state.value.retryAfterSeconds > 0) 1.seconds
-                else (requireNotNull(state.value.mutedUntil) - clock.now()).coerceAtLeast(1.seconds)
-                delay(wait)
+            while (active && state.value.retryAfterSeconds > 0) {
+                delay(1.seconds)
                 refreshClock()
             }
         }
@@ -195,10 +218,7 @@ internal class ChatComposerController(
             val whole = remaining.inWholeSeconds
             (whole + if (remaining > whole.seconds) 1 else 0).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         } else 0
-        mutableState.value = state.value.copy(
-            mutedUntil = mutedUntil?.takeIf { it > now },
-            retryAfterSeconds = seconds,
-        )
+        mutableState.value = state.value.copy(retryAfterSeconds = seconds)
     }
 
     private data class SendAttempt(val text: String, val key: String, val revision: Long)
