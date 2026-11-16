@@ -100,7 +100,7 @@ internal fun MeetingProposalCard(
             if (proposal.id in state.votableIds) {
                 SecondaryButton(
                     text = stringResource(if (proposal.viewerGoing) Res.string.meetings_unvote else Res.string.meetings_vote),
-                    onClick = { eventHandler(MeetingViewEvent.OnVote(proposal.id)) },
+                    onClick = { eventHandler(MeetingViewEvent.OnVote(proposal.id, !proposal.viewerGoing)) },
                     isEnabled = isActionAllowed,
                 )
             }

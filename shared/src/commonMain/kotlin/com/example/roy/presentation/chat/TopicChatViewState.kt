@@ -12,6 +12,7 @@ internal data class TopicChatViewState(
     val isLoading: Boolean = true,
     val isOnline: Boolean = true,
     val isAccessUncertain: Boolean = false,
+    val accessCheck: Long = 0,
     val isLoadingOlder: Boolean = false,
     val historyIssue: TopicChatIssue? = null,
     val olderIssue: TopicChatIssue? = null,

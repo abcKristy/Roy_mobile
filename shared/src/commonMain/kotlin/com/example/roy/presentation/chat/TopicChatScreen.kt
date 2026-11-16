@@ -67,7 +67,7 @@ internal fun TopicChatScreen(
     }
     val chatAuthorized = viewerId != null && !viewState.isAccessUncertain && !viewState.isLeaving && !isMembershipDenied
     val isMeetingOverlayOpen = chatAuthorized && meetingState?.sheet != null
-    LaunchedEffect(meetings, chatAuthorized, viewerId, viewState.isOnline) {
+    LaunchedEffect(meetings, chatAuthorized, viewerId, viewState.isOnline, viewState.accessCheck) {
         meetingEvent?.invoke(MeetingViewEvent.OnAccessChanged(chatAuthorized, viewerId, viewState.isOnline))
     }
     LaunchedEffect(viewModel, isMeetingOverlayOpen) {
@@ -94,7 +94,6 @@ internal fun TopicChatScreen(
     CollectMviActions(viewModel.viewAction) { action ->
         when (action) {
             TopicChatViewAction.CloseScreen -> onBack()
-            TopicChatViewAction.OpenLeaveDialog -> Unit
             is TopicChatViewAction.ShowLeaveError -> snackbar.show(
                 RoySnackbarMessage(++snackbarId, issues.getValue(action.issue)),
             )

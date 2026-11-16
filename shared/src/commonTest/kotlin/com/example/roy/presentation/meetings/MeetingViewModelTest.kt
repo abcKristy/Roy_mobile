@@ -59,6 +59,64 @@ class MeetingViewModelTest {
     }
 
     @Test
+    fun proposalFromDifferentChatFinishesWithGone() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val model = Fixture().model(initialProposal = "foreign")
+        try {
+            model.handleEvent(access)
+            runCurrent()
+            assertEquals(MeetingIssue.Gone, model.viewState.value.issue)
+            assertNull(model.viewState.value.selectedProposal)
+        } finally {
+            model.viewModelScope.cancel()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun voteAlreadyAppliedByAnotherClientDoesNotRemoveIt() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val model = Fixture().model()
+        try {
+            model.handleEvent(access)
+            runCurrent()
+            model.handleEvent(MeetingViewEvent.OnVote("row", going = true))
+            runCurrent()
+            assertTrue(model.viewState.value.proposals.single().viewerGoing)
+        } finally {
+            model.viewModelScope.cancel()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun formRejectsSecondsAndNonIsoDate() {
+        assertNull(parseMeetingLocalTime("2035-01-02", "10:15:30"))
+        assertNull(parseMeetingLocalTime("2035-1-02", "10:15"))
+        assertNotNull(parseMeetingLocalTime("2035-01-02", "10:15"))
+    }
+
+    @Test
+    fun openingListRetriesAfterPreloadFailure() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val fixture = Fixture().apply { failList = true }
+        val model = fixture.model()
+        try {
+            model.handleEvent(access)
+            runCurrent()
+            assertEquals(MeetingIssue.Offline, model.viewState.value.issue)
+            fixture.failList = false
+            model.handleEvent(MeetingViewEvent.OnMeetingsRequested)
+            runCurrent()
+            assertEquals("row", model.viewState.value.proposals.single().id)
+            assertNull(model.viewState.value.issue)
+        } finally {
+            model.viewModelScope.cancel()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun overlapConfirmationKeepsKeyAndWarnedRevision() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val fixture = Fixture()
@@ -111,6 +169,7 @@ class MeetingViewModelTest {
         val commands = mutableListOf<Command>()
         var row = proposal("row")
         var loseBookingResponse = false
+        var failList = false
         private val pin = proposal("pin")
 
         suspend fun model(initialProposal: String? = null): MeetingViewModel {
@@ -135,7 +194,8 @@ class MeetingViewModelTest {
         }
 
         override suspend fun list(chatId: String, token: String, cursor: String?) =
-            AuthResult.Success(MeetingReply.Data(MeetingPage(listOf(row), null)))
+            if (failList) AuthResult.Failure(AuthError(AuthErrorCode.Network))
+            else AuthResult.Success(MeetingReply.Data(MeetingPage(listOf(row), null)))
 
         override suspend fun votes(proposalId: String, token: String, cursor: String?) = error("Unexpected voter read")
         override suspend fun create(chatId: String, startsAt: Instant, endsAt: Instant, key: String, token: String) =
@@ -162,6 +222,7 @@ class MeetingViewModelTest {
             when (proposalId) {
                 row.id -> MeetingReply.Data(row)
                 pin.id -> MeetingReply.Data(pin)
+                "foreign" -> MeetingReply.Data(proposal("foreign").copy(chatId = "another-chat"))
                 else -> MeetingReply.Rejected(MeetingRejection.NotMember)
             },
         )

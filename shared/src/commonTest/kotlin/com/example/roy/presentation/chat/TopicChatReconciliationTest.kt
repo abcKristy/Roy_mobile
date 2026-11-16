@@ -2,6 +2,8 @@ package com.example.roy.presentation.chat
 
 import androidx.lifecycle.viewModelScope
 import com.example.roy.domain.auth.AuthResult
+import com.example.roy.domain.auth.AuthError
+import com.example.roy.domain.auth.AuthErrorCode
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.SessionStatus
 import com.example.roy.domain.auth.SessionTestRepository
@@ -21,8 +23,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -84,6 +88,54 @@ class TopicChatReconciliationTest {
         }
     }
 
+    @Test
+    fun visibleReadRetriesTransientFailureWithoutAnotherVisibilityEvent() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val fixture = Fixture().apply { historyGate.complete(Unit) }
+        var attempts = 0
+        val model = fixture.model(ChatReadCursor { sequence ->
+            if (++attempts == 1) AuthResult.Failure(AuthError(AuthErrorCode.Network))
+            else AuthResult.Success(sequence)
+        })
+        try {
+            model.handleEvent(TopicChatViewEvent.OnResume)
+            runCurrent()
+            model.handleEvent(TopicChatViewEvent.OnVisibleMessage(1L))
+            advanceTimeBy(251)
+            assertEquals(1, attempts)
+            advanceTimeBy(1_000)
+            assertEquals(2, attempts)
+        } finally {
+            model.viewModelScope.cancel()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun reportCannotSubmitOfflineAndDiscardClearsDraft() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val auth = SessionTestRepository()
+        val session = SessionCoordinator(auth, SessionTestStore().apply { saved = auth.first })
+        session.restore()
+        val scope = (session.state.value as SessionStatus.Active).scopeId
+        val connectivity = MutableStateFlow(true)
+        val model = ChatReportViewModel(ChatReportTarget("author", "Автор"), "chat", scope, session, UnusedWriter, connectivity)
+        try {
+            model.handleEvent(ChatReportEvent.Edit("Причина жалобы"))
+            connectivity.value = false
+            runCurrent()
+            model.handleEvent(ChatReportEvent.Submit)
+            runCurrent()
+            assertFalse(model.viewState.value.canSubmit)
+            assertFalse(model.viewState.value.isSubmitting)
+            model.discard()
+            assertEquals("", model.viewState.value.reason)
+        } finally {
+            model.viewModelScope.cancel()
+            Dispatchers.resetMain()
+        }
+    }
+
     private class Fixture {
         val events = MutableSharedFlow<ChatRealtimeEvent>()
         val historyGate = CompletableDeferred<Unit>()
@@ -107,14 +159,14 @@ class TopicChatReconciliationTest {
                 error("Unexpected search")
         }
 
-        suspend fun model(): TopicChatViewModel {
+        suspend fun model(unread: ChatReadCursor = ChatReadCursor { AuthResult.Success(it) }): TopicChatViewModel {
             val auth = SessionTestRepository()
             val session = SessionCoordinator(auth, SessionTestStore().apply { saved = auth.first })
             session.restore()
             val scope = (session.state.value as SessionStatus.Active).scopeId
             return TopicChatViewModel(
                 scope, "point", "topic", "chat", session, repository, UnusedPointDetails,
-                ChatReadCursor { AuthResult.Success(it) }, UnusedWriter, { events }, flowOf(true), {},
+                unread, UnusedWriter, { events }, flowOf(true), {},
             )
         }
     }

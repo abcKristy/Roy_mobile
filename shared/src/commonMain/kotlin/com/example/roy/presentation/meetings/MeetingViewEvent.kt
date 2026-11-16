@@ -15,7 +15,7 @@ internal sealed class MeetingViewEvent {
     data object OnVotersLoadMore : MeetingViewEvent()
     data object OnVotersRetry : MeetingViewEvent()
     data class OnProposalSelected(val proposalId: String) : MeetingViewEvent()
-    data class OnVote(val proposalId: String) : MeetingViewEvent()
+    data class OnVote(val proposalId: String, val going: Boolean) : MeetingViewEvent()
     data class OnVotersRequested(val proposalId: String) : MeetingViewEvent()
     data class OnBookRequested(val proposalId: String) : MeetingViewEvent()
     data object OnBookConfirmed : MeetingViewEvent()

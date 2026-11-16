@@ -14,18 +14,19 @@ internal class MeetingAvatarAdapter(
     private val transport: AuthHttpTransport,
     private val sessions: SessionCoordinator,
 ) {
-    private val origin = baseUrl.trimEnd('/').also { value ->
+    private val origin = baseUrl.trimEnd('/').takeIf { value ->
         val match = ORIGIN.matchEntire(value)
         val port = match?.groupValues?.get(1).orEmpty()
-        require(match != null && (port.isEmpty() || port.toIntOrNull()?.let { it in 1..65535 } == true)) { "Invalid avatar API origin" }
+        match != null && (port.isEmpty() || port.toIntOrNull()?.let { it in 1..65535 } == true)
     }
 
     fun forScope(scopeId: Long): MeetingVoterAvatarLoader = MeetingVoterAvatarLoader { userId, avatarPath ->
+        val apiOrigin = origin ?: return@MeetingVoterAvatarLoader null
         if (!USER_ID.matches(userId) || avatarPath != "/api/v1/users/$userId/avatar") {
             return@MeetingVoterAvatarLoader null
         }
 
-        when (val result = sessions.readProtected(scopeId) { accessToken -> read("$origin$avatarPath", accessToken) }) {
+        when (val result = sessions.readProtected(scopeId) { accessToken -> read("$apiOrigin$avatarPath", accessToken) }) {
             is AuthResult.Success -> result.value
             is AuthResult.Failure -> null
         }
@@ -55,6 +56,6 @@ internal class MeetingAvatarAdapter(
         const val MAX_AVATAR_BYTES = 5 * 1024 * 1024
         val CONTENT_TYPES = setOf("image/jpeg", "image/png")
         val USER_ID = Regex("[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
-        val ORIGIN = Regex("""(?:https://[A-Za-z0-9.-]+|http://127\.0\.0\.1)(?::([0-9]{1,5}))?""")
+        val ORIGIN = Regex("""(?:https://[A-Za-z0-9.-]+|http://(?:127\.0\.0\.1|localhost))(?::([0-9]{1,5}))?""")
     }
 }

@@ -44,6 +44,7 @@ import com.example.roy.presentation.components.overlays.RoySnackbarMessage
 import com.example.roy.presentation.core.CollectMviActions
 import com.example.roy.presentation.components.feedback.LoadingMode
 import com.example.roy.presentation.components.feedback.LoadingState
+import com.example.roy.presentation.components.feedback.ErrorState
 import com.example.roy.presentation.navigation.MainTab
 import com.example.roy.presentation.navigation.AuthReturnCoordinator
 import com.example.roy.presentation.navigation.PendingProtectedIntent
@@ -74,6 +75,7 @@ import kotlinx.coroutines.flow.Flow
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.Res
 import roy.shared.generated.resources.auth_restore
+import roy.shared.generated.resources.protected_unavailable
 import roy.shared.generated.resources.map_point_gone
 
 @Composable
@@ -183,10 +185,24 @@ internal fun RoyRootScreen(
         }
     }
 
+    var deferredMeeting by remember { mutableStateOf<Pair<Long?, MeetingNotificationTarget>?>(null) }
     LaunchedEffect(meetingTargets) {
         meetingTargets.collect { target ->
-            navigate(continuation.request(PendingProtectedIntent.OpenMeeting(target), session.state.value))
+            deferredMeeting = (session.state.value as? SessionStatus.Active)?.scopeId to target
         }
+    }
+    LaunchedEffect(deferredMeeting, backStackEntry, activeChatScope) {
+        val (scope, target) = deferredMeeting ?: return@LaunchedEffect
+        if (scope != null && scope != activeChatScope) {
+            deferredMeeting = null
+            return@LaunchedEffect
+        }
+        val destination = navController.currentDestination ?: return@LaunchedEffect
+        if (destination.hasRoute<RoyRoute.ProtectedTarget>() || destination.hasRoute<RoyRoute.ProtectedAuth>()) {
+            return@LaunchedEffect
+        }
+        deferredMeeting = null
+        navigate(continuation.request(PendingProtectedIntent.OpenMeeting(target), session.state.value))
     }
 
     LaunchedEffect(backStackEntry) {
@@ -361,7 +377,7 @@ internal fun RoyRootScreen(
                             },
                             reportContent = { target, onDismiss ->
                                 val report = viewModel(key = "report/" + route.scopeId + "/" + route.chatId + "/" + target.userId) {
-                                    ChatReportViewModel(target, route.chatId, route.scopeId, session, chatWriter)
+                                    ChatReportViewModel(target, route.chatId, route.scopeId, session, chatWriter, connectivity)
                                 }
                                 ChatReportDialog(target, report, onDismiss)
                             },
@@ -404,10 +420,22 @@ internal fun RoyRootScreen(
                     val intent = current?.intent as? PendingProtectedIntent.CreatePoint
                     val meeting = (current?.intent as? PendingProtectedIntent.OpenMeeting)?.target
                     if (current != null && meeting != null && sessionStatus == SessionStatus.Active(current.scopeId)) {
-                        LoadingState(LoadingMode.Fullscreen, stringResource(Res.string.auth_restore))
-                        LaunchedEffect(current) {
+                        var retry by remember(current) { mutableLongStateOf(0L) }
+                        var failed by remember(current) { mutableStateOf(false) }
+                        if (failed) {
+                            ErrorState(
+                                stringResource(Res.string.protected_unavailable),
+                                isRetryEnabled = true,
+                                onRetry = { failed = false; retry++ },
+                            )
+                        } else LoadingState(LoadingMode.Fullscreen, stringResource(Res.string.auth_restore))
+                        LaunchedEffect(current, retry) {
                             val result = session.readProtected(current.scopeId) { chatHistory.detail(meeting.chatId, it) }
                             if (!isCurrentTarget(current) || session.state.value != SessionStatus.Active(current.scopeId)) {
+                                return@LaunchedEffect
+                            }
+                            if (result is AuthResult.Failure) {
+                                failed = true
                                 return@LaunchedEffect
                             }
                             val detail = ((result as? AuthResult.Success)?.value as? ChatReadReply.Data)?.value

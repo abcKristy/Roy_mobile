@@ -89,7 +89,7 @@ internal fun ChatHistoryList(
             TopicChatMessageCard(
                 message = message,
                 currentUserId = viewState.detail?.userId,
-                isReportEnabled = viewState.canInteract,
+                isReportEnabled = viewState.canInteract && viewState.isOnline,
                 eventHandler = eventHandler,
                 onOpenMeeting = onOpenMeeting.takeIf { viewState.canInteract },
             )

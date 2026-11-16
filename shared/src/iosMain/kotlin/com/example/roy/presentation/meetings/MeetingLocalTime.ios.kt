@@ -15,7 +15,7 @@ internal actual fun meetingLocalFields(instant: Instant): Pair<String, String> {
     return formatter("yyyy-MM-dd").stringFromDate(date) to formatter("HH':00'").stringFromDate(date)
 }
 
-internal actual fun parseMeetingLocalTime(date: String, time: String): Instant? {
+internal actual fun parsePlatformMeetingLocalTime(date: String, time: String): Instant? {
     val input = "$date $time"
     val formatter = formatter("yyyy-MM-dd HH:mm")
     val parsed = formatter.dateFromString(input) ?: return null

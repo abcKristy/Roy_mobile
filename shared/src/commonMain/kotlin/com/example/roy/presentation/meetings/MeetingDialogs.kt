@@ -101,11 +101,18 @@ internal fun MeetingDialogs(
                 modifier = Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(RoyTheme.dimensions.spacing.small),
             ) {
-                viewState.issue?.let { MeetingIssueText(it) }
                 if (proposal != null && proposal.id == sheet.proposalId) {
+                    viewState.issue?.let { MeetingIssueText(it) }
                     MeetingProposalCard(proposal, viewState, eventHandler)
-                } else if (viewState.issue == null) {
-                    LoadingState(LoadingMode.Inline, stringResource(Res.string.meetings_loading))
+                } else {
+                    val issue = viewState.issue
+                    when (issue) {
+                        null -> LoadingState(LoadingMode.Inline, stringResource(Res.string.meetings_loading))
+                        MeetingIssue.Gone, MeetingIssue.NotMember -> MeetingIssueText(issue)
+                        else -> ErrorState(stringResource(issue.resource), viewState.isOnline, onRetry = {
+                            eventHandler(MeetingViewEvent.OnRefresh)
+                        })
+                    }
                 }
             }
         }
@@ -188,7 +195,8 @@ private fun MeetingListSheet(viewState: MeetingViewState, eventHandler: (Meeting
                 val issue = viewState.issue
                 when {
                     viewState.isLoading -> LoadingState(LoadingMode.Inline, stringResource(Res.string.meetings_loading))
-                    issue != null && issue != MeetingIssue.Cancelled && history.isEmpty() && pinned == null ->
+                    issue != null && (issue == MeetingIssue.InvalidCursor ||
+                        (issue != MeetingIssue.Cancelled && history.isEmpty() && pinned == null)) ->
                         ErrorState(stringResource(issue.resource), viewState.isOnline, { eventHandler(MeetingViewEvent.OnRefresh) })
                     issue != null -> MeetingIssueText(issue)
                     pinned == null && history.isEmpty() -> MeetingBody(stringResource(Res.string.meetings_empty))

@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -41,11 +42,13 @@ import roy.shared.generated.resources.chat_report_retry
 import roy.shared.generated.resources.chat_report_submit
 import roy.shared.generated.resources.chat_report_submitted
 import roy.shared.generated.resources.chat_report_title
+import roy.shared.generated.resources.auth_network
 
 @Composable
 internal fun ChatReportDialog(target: ChatReportTarget, model: ChatReportViewModel, onDismiss: () -> Unit) {
     val state by model.viewState.collectAsStateWithLifecycle()
     val eventHandler = remember(model) { model::handleEvent }
+    DisposableEffect(model) { onDispose { model.discard() } }
     CollectMviActions(model.viewAction) { onDismiss() }
     ChatReportView(target, state, eventHandler)
 }
@@ -80,7 +83,7 @@ internal fun ChatReportView(
                     label = stringResource(Res.string.chat_report_reason),
                     onValueChange = { eventHandler(ChatReportEvent.Edit(it)) },
                     isEnabled = !viewState.isSubmitting,
-                    errorText = if (viewState.reason.isNotBlank() && !viewState.isSubmitting && !viewState.canSubmit)
+                    errorText = if (viewState.reason.isNotBlank() && !viewState.isSubmitting && !viewState.isReasonValid)
                         stringResource(Res.string.chat_report_invalid) else null,
                 )
             }
@@ -100,6 +103,9 @@ internal fun ChatReportView(
                 )
             }
             if (!viewState.isFinal) {
+                if (!viewState.isOnline) {
+                    BasicText(stringResource(Res.string.auth_network), style = type.body.copy(color = colors.textPrimary))
+                }
                 PrimaryButton(
                     text = stringResource(Res.string.chat_report_submit),
                     onClick = { eventHandler(ChatReportEvent.Submit) },

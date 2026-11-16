@@ -73,7 +73,7 @@ internal fun TopicChatView(
                 TertiaryButton(
                     label = stringResource(Res.string.chat_leave),
                     onClick = { eventHandler(TopicChatViewEvent.OnLeaveRequested) },
-                    isEnabled = viewState.canInteract,
+                    isEnabled = viewState.canInteract && viewState.isOnline,
                 )
             }
         }

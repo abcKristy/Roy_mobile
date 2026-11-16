@@ -66,7 +66,7 @@ internal class TopicChatViewModel(
         viewModelScope.launch {
             connectivity.collect { online ->
                 if (isClosed || !scopeIsCurrent() || online == viewState.value.isOnline) return@collect
-                updateState { it.copy(isOnline = online) }
+                updateState { it.copy(isOnline = online, isLeaveDialogOpen = it.isLeaveDialogOpen && (online || it.isLeaving)) }
                 if (!online) stopRead()
                 else if (isResumed) recheckAccess()
             }
@@ -207,6 +207,7 @@ internal class TopicChatViewModel(
         }
         updateState { it.copy(
             detail = detail, isLoading = false, historyIssue = null,
+            accessCheck = it.accessCheck + 1,
             isAccessUncertain = it.isAccessUncertain && isResyncPending,
         ) }
         return true
@@ -326,17 +327,24 @@ internal class TopicChatViewModel(
         if (readJob?.isActive == true) return
         readJob = viewModelScope.launch {
             delay(250)
+            var retries = 0
             while (canRead(viewState.value) && pendingRead > lastRead) {
                 val current = viewState.value
                 val next = pendingRead
                 val upper = maxOf(current.detail?.lastMessageSeq ?: 0L, current.messages.firstOrNull()?.messageSeq ?: 0L)
                 when (val result = unread.advance(next, upper)) {
                     is AuthResult.Success -> {
+                        retries = 0
                         lastRead = maxOf(lastRead, result.value)
                         if (lastRead < next) break
                     }
                     is AuthResult.Failure -> {
-                        if (result.error.code != AuthErrorCode.Network) recheckAccess()
+                        if (result.error.code == AuthErrorCode.Network || result.error.code == AuthErrorCode.ServiceUnavailable) {
+                            if (retries++ < 2) {
+                                delay(1_000L * retries)
+                                continue
+                            }
+                        } else recheckAccess()
                         break
                     }
                 }
@@ -354,10 +362,9 @@ internal class TopicChatViewModel(
     }
 
     private fun onLeaveRequested() {
-        if (!viewState.value.canInteract) return
+        if (!viewState.value.canInteract || !viewState.value.isOnline) return
         stopRead()
         updateState { it.copy(isLeaveDialogOpen = true) }
-        viewModelScope.launch { sendAction(TopicChatViewAction.OpenLeaveDialog) }
     }
 
     private fun onLeaveDismissed() {
@@ -366,7 +373,7 @@ internal class TopicChatViewModel(
 
     private fun onLeaveConfirmed() {
         val state = viewState.value
-        if (!scopeIsCurrent() || !state.isLeaveDialogOpen || !state.canInteract) return
+        if (!scopeIsCurrent() || !state.isLeaveDialogOpen || !state.canInteract || !state.isOnline) return
         updateState { it.copy(isLeaving = true) }
         olderJob?.cancel()
         searchJob?.cancel()
@@ -413,7 +420,7 @@ internal class TopicChatViewModel(
 
     private fun onReportRequested(messageId: String) {
         val state = viewState.value
-        if (!scopeIsCurrent() || !state.canInteract) return
+        if (!scopeIsCurrent() || !state.canInteract || !state.isOnline) return
         val message = (state.search?.results ?: state.messages).firstOrNull { it.id == messageId } ?: return
         val author = message.author ?: return
         val userId = author.id ?: return

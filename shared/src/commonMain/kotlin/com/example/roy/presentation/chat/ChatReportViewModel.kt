@@ -10,6 +10,10 @@ import com.example.roy.domain.chat.ChatReportReply
 import com.example.roy.domain.chat.ChatWriteRepository
 import com.example.roy.presentation.core.BaseViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlin.uuid.Uuid
 
 internal data class ChatReportTarget(val userId: String, val displayName: String)
@@ -20,21 +24,25 @@ internal data class ChatReportState(
     val reason: String = "",
     val isSubmitting: Boolean = false,
     val feedback: ChatReportFeedback? = null,
+    val isOnline: Boolean = true,
 ) {
     val isFinal: Boolean
         get() = feedback == ChatReportFeedback.Submitted || feedback == ChatReportFeedback.Duplicate ||
             feedback == ChatReportFeedback.Forbidden
 
-    val canSubmit: Boolean get() = !isSubmitting && !isFinal && isReportReasonValid(reason)
+    val isReasonValid: Boolean get() = isReportReasonValid(reason)
+    val canSubmit: Boolean get() = isOnline && !isSubmitting && !isFinal && isReasonValid
 }
 
-internal sealed interface ChatReportEvent {
-    data class Edit(val reason: String) : ChatReportEvent
-    data object Submit : ChatReportEvent
-    data object Close : ChatReportEvent
+internal sealed class ChatReportEvent {
+    data class Edit(val reason: String) : ChatReportEvent()
+    data object Submit : ChatReportEvent()
+    data object Close : ChatReportEvent()
 }
 
-internal enum class ChatReportAction { Close }
+internal sealed class ChatReportAction {
+    data object Close : ChatReportAction()
+}
 
 internal class ChatReportViewModel(
     private val target: ChatReportTarget,
@@ -42,16 +50,27 @@ internal class ChatReportViewModel(
     private val scopeId: Long,
     private val session: SessionCoordinator,
     private val writer: ChatWriteRepository,
+    connectivity: Flow<Boolean> = flowOf(true),
 ) : BaseViewModel<ChatReportState, ChatReportEvent, ChatReportAction>(ChatReportState()) {
     private var operation: ReportOperation? = null
+    private var submission: Job? = null
+
+    init {
+        viewModelScope.launch { connectivity.collect { online -> updateState { it.copy(isOnline = online) } } }
+    }
+
+    fun discard() {
+        submission?.cancel()
+        operation = null
+        updateState { ChatReportState(isOnline = it.isOnline) }
+    }
 
     override fun handleEvent(event: ChatReportEvent) {
         when (event) {
             is ChatReportEvent.Edit -> edit(event.reason)
             ChatReportEvent.Submit -> submit()
             ChatReportEvent.Close -> if (!viewState.value.isSubmitting) {
-                operation = null
-                updateState { ChatReportState() }
+                discard()
                 viewModelScope.launch { sendAction(ChatReportAction.Close) }
             }
         }
@@ -70,10 +89,11 @@ internal class ChatReportViewModel(
         val command = operation ?: ReportOperation(state.reason.trim(), Uuid.random().toString())
         operation = command
         updateState { it.copy(isSubmitting = true, feedback = null) }
-        viewModelScope.launch {
+        submission = viewModelScope.launch {
             val result = session.mutateProtected(scopeId) { token ->
                 writer.report(chatId, target.userId, command.reason, command.key, token)
             }
+            ensureActive()
             val feedback = when (result) {
                 is AuthResult.Success -> when (result.value) {
                     ChatReportReply.Submitted -> ChatReportFeedback.Submitted

@@ -7,14 +7,18 @@ import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.suspendCancellableCoroutine
 import platform.Foundation.NSData
+import platform.Foundation.NSError
 import platform.Foundation.NSHTTPURLResponse
+import platform.Foundation.NSMutableData
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLRequest
 import platform.Foundation.NSURLSession
 import platform.Foundation.NSURLSessionConfiguration
 import platform.Foundation.NSURLSessionTask
-import platform.Foundation.NSURLSessionTaskDelegateProtocol
+import platform.Foundation.NSURLSessionDataDelegateProtocol
+import platform.Foundation.NSURLSessionDataTask
+import platform.Foundation.appendData
 import platform.Foundation.create
 import platform.Foundation.dataTaskWithRequest
 import platform.Foundation.setHTTPBody
@@ -55,29 +59,48 @@ internal class IosAuthHttpTransport : AuthHttpTransport {
             URLCache = null
             URLCredentialStorage = null
         }
-        val session = NSURLSession.sessionWithConfiguration(configuration, NoRedirects(), null)
-        val task = session.dataTaskWithRequest(wireRequest, completionHandler = { data, response, error ->
-            val http = response as? NSHTTPURLResponse
-            continuation.resume(
-                if (error == null && http != null) {
-                    val body = data?.boundedBytes(request.maxResponseBytes)
-                    AuthHttpResponse(
-                        status = http.statusCode.toInt(),
-                        body = if (request.isBinaryResponseExpected) "" else body?.decodeToString().orEmpty(),
-                        retryAfter = http.headerValue("Retry-After"),
-                        binaryBody = if (request.isBinaryResponseExpected && http.statusCode.toInt() == 200) body else null,
-                        contentType = http.headerValue("Content-Type"),
-                    )
-                }
-                else null
-            )
-            session.finishTasksAndInvalidate()
-        })
+        val delegate = BoundedResponse(request, onComplete = continuation::resume)
+        // Foundation creates a serial delegate queue when no queue is supplied.
+        val session = NSURLSession.sessionWithConfiguration(configuration, delegate, null)
+        val task = session.dataTaskWithRequest(wireRequest)
         continuation.invokeOnCancellation { session.invalidateAndCancel() }
         task.resume()
     }
 
-    private class NoRedirects : NSObject(), NSURLSessionTaskDelegateProtocol {
+    private class BoundedResponse(
+        private val request: AuthHttpRequest,
+        private val onComplete: (AuthHttpResponse?) -> Unit,
+    ) : NSObject(), NSURLSessionDataDelegateProtocol {
+        private val received = NSMutableData()
+        private var oversizedResponse: NSHTTPURLResponse? = null
+
+        override fun URLSession(session: NSURLSession, dataTask: NSURLSessionDataTask, didReceiveData: NSData) {
+            if (oversizedResponse != null) return
+            if (didReceiveData.length > request.maxResponseBytes.toULong() - received.length) {
+                oversizedResponse = dataTask.response as? NSHTTPURLResponse
+                dataTask.cancel()
+                return
+            }
+            received.appendData(didReceiveData)
+        }
+
+        override fun URLSession(session: NSURLSession, task: NSURLSessionTask, didCompleteWithError: NSError?) {
+            val http = oversizedResponse ?: (task.response as? NSHTTPURLResponse).takeIf { didCompleteWithError == null }
+            val response = http?.let {
+                val status = it.statusCode.toInt()
+                val body = if (oversizedResponse == null) received.boundedBytes(request.maxResponseBytes) else null
+                AuthHttpResponse(
+                    status = status,
+                    body = if (request.isBinaryResponseExpected) "" else body?.decodeToString().orEmpty(),
+                    retryAfter = it.headerValue("Retry-After"),
+                    binaryBody = if (request.isBinaryResponseExpected && status == 200) body else null,
+                    contentType = it.headerValue("Content-Type"),
+                )
+            }
+            onComplete(response)
+            session.finishTasksAndInvalidate()
+        }
+
         override fun URLSession(
             session: NSURLSession,
             task: NSURLSessionTask,

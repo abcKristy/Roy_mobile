@@ -42,6 +42,7 @@ internal class MeetingViewModel(
     private var initialTarget = initialProposalId
     private var pinId: String? = null
     private var proposalsCursor: String? = null
+    private var hasLoadedOlderProposals = false
     private var votersCursor: String? = null
     private var refreshJob: Job? = null
     private var pageJob: Job? = null
@@ -80,7 +81,10 @@ internal class MeetingViewModel(
                     refresh()
                 }
             }
-            MeetingViewEvent.OnMeetingsRequested -> if (authorized()) open(MeetingSheet.List)
+            MeetingViewEvent.OnMeetingsRequested -> if (authorized() && !pending()) {
+                open(MeetingSheet.List)
+                if (viewState.value.isOnline) refresh() else showIssue(MeetingIssue.Offline)
+            }
             MeetingViewEvent.OnDismiss -> dismiss()
             MeetingViewEvent.OnCreateRequested -> openCreate()
             is MeetingViewEvent.OnDateChanged -> editDraft { copy(date = event.date, dateIssue = null) }
@@ -92,7 +96,7 @@ internal class MeetingViewModel(
             MeetingViewEvent.OnVotersLoadMore -> loadVoters(append = true)
             MeetingViewEvent.OnVotersRetry -> loadVoters()
             is MeetingViewEvent.OnProposalSelected -> select(event.proposalId)
-            is MeetingViewEvent.OnVote -> vote(event.proposalId)
+            is MeetingViewEvent.OnVote -> vote(event.proposalId, event.going)
             is MeetingViewEvent.OnVotersRequested -> if (authorized() && event.proposalId in snapshots) {
                 open(MeetingSheet.Voters(event.proposalId))
                 loadVoters()
@@ -156,6 +160,7 @@ internal class MeetingViewModel(
         snapshots.clear()
         pinId = null
         proposalsCursor = null
+        hasLoadedOlderProposals = false
         votersCursor = null
         createAttempt = null
         commandAttempt = null
@@ -179,7 +184,8 @@ internal class MeetingViewModel(
         val epoch = accessEpoch
         updateState { it.copy(isLoading = true) }
         val needed = changedIds.toSet()
-        changedIds.clear()
+        changedIds.removeAll(needed)
+        val unresolved = needed.toMutableSet()
         try {
             val detail = sessions.readProtected(scopeId) { history.detail(chatId, it) }
             currentCoroutineContext().ensureActive()
@@ -194,8 +200,9 @@ internal class MeetingViewModel(
             }
             val page = read({ meetings.list(chatId, it) }, roomScoped = true, failure = ::showIssue) ?: return
             val previous = viewState.value.proposals
-            val loadedMore = previous.size > FirstPageSize
+            val loadedMore = hasLoadedOlderProposals
             val onFirstPage = page.items.mapTo(mutableSetOf(), MeetingProposal::id)
+            unresolved.removeAll(onFirstPage)
             val ids = (needed + listOfNotNull(pinId, viewState.value.sheet?.proposalId)) - onFirstPage
             page.items.forEach(::accept)
             proposalsCursor = if (loadedMore) proposalsCursor else page.nextCursor
@@ -208,18 +215,27 @@ internal class MeetingViewModel(
                 val proposal = read({ meetings.detail(id, it) }) { issue ->
                     val isSelected = viewState.value.sheet?.proposalId == id
                     if (isSelected || pinId == id) showIssue(issue)
-                    if (issue == MeetingIssue.Gone && isSelected) {
+                    if (issue == MeetingIssue.Gone) {
+                        unresolved.remove(id)
                         snapshots.remove(id)
                         updateState { it.copy(proposals = it.proposals.filterNot { row -> row.id == id }) }
                     }
                 }
-                if (proposal != null) accept(proposal, expectedId = id)
+                if (proposal != null) {
+                    unresolved.remove(id)
+                    if (!accept(proposal, expectedId = id) && viewState.value.sheet?.proposalId == id) {
+                        showIssue(MeetingIssue.Gone)
+                    }
+                }
             }
             updateEligibility()
             val voters = viewState.value.sheet as? MeetingSheet.Voters
             if (voters != null) loadVoters()
         } finally {
-            if (accessEpoch == epoch) updateState { it.copy(isLoading = false) }
+            if (accessEpoch == epoch) {
+                changedIds.addAll(unresolved)
+                updateState { it.copy(isLoading = false) }
+            }
         }
     }
 
@@ -230,10 +246,18 @@ internal class MeetingViewModel(
         val epoch = accessEpoch
         pageJob = viewModelScope.launch {
             try {
-                val page = read({ meetings.list(chatId, it, cursor) }, roomScoped = true, failure = ::showIssue)
+                val page = read({ meetings.list(chatId, it, cursor) }, roomScoped = true) { issue ->
+                    showIssue(issue)
+                    if (issue == MeetingIssue.InvalidCursor) {
+                        hasLoadedOlderProposals = false
+                        proposalsCursor = null
+                        updateState { it.copy(hasMore = false) }
+                    }
+                }
                     ?: return@launch
                 page.items.forEach(::accept)
                 proposalsCursor = page.nextCursor
+                hasLoadedOlderProposals = true
                 updateState { state -> state.copy(
                     proposals = (state.proposals + page.items).distinctBy(MeetingProposal::id)
                         .mapNotNull { snapshots[it.id] },
@@ -249,11 +273,15 @@ internal class MeetingViewModel(
     private fun loadVoters(append: Boolean = false) {
         val id = (viewState.value.sheet as? MeetingSheet.Voters)?.proposalId ?: return
         val cursor = if (append) votersCursor ?: return else null
-        if (!authorized() || !viewState.value.isOnline) return
+        if (!authorized()) return
+        if (!viewState.value.isOnline) {
+            updateState { it.copy(isLoadingVoters = false, votersIssue = MeetingIssue.Offline) }
+            return
+        }
         if (append && viewState.value.isLoadingVoters) return
         votersJob?.cancel()
         if (!append) votersCursor = null
-        updateState { it.copy(isLoadingVoters = true, votersIssue = null) }
+        updateState { it.copy(isLoadingVoters = true, hasMoreVoters = append && it.hasMoreVoters, votersIssue = null) }
         votersJob = viewModelScope.launch {
             val page = read({ meetings.votes(id, it, cursor) }) { issue ->
                 updateState { it.copy(isLoadingVoters = false, votersIssue = issue) }
@@ -262,7 +290,7 @@ internal class MeetingViewModel(
             votersCursor = page.nextCursor
             updateState { it.copy(
                 voters = ((if (append) it.voters else emptyList()) + page.items)
-                    .distinctBy { vote -> vote.userId to vote.createdAt },
+                    .distinctBy { vote -> vote.userId ?: vote },
                 hasMoreVoters = page.nextCursor != null, isLoadingVoters = false,
             ) }
         }
@@ -349,11 +377,11 @@ internal class MeetingViewModel(
         }
     }
 
-    private fun vote(id: String) {
+    private fun vote(id: String, going: Boolean) {
         if (!checkAction(id) { votableIds }) return
         val proposal = snapshots.getValue(id)
-        // A retry after an ambiguous response needs a fresh snapshot before computing the toggle.
-        mutate(id, { meetings.vote(id, !proposal.viewerGoing, it) })
+        // A recent server update may already satisfy the action shown to the user.
+        if (proposal.viewerGoing != going) mutate(id, { meetings.vote(id, going, it) })
     }
 
     private fun book(confirmOverlap: Boolean) {
@@ -439,6 +467,9 @@ internal class MeetingViewModel(
         if (current != null && accept(current, reply.id)) {
             onSuccess(snapshots.getValue(reply.id))
             updateEligibility()
+        } else if (id == null && authorized()) {
+            createAttempt = null
+            updateState { it.copy(draft = MeetingDraft(), sheet = MeetingSheet.Detail(reply.id)) }
         }
         sendAction(MeetingViewAction.RefreshChatHistory)
         onRealtimeChange(reply.id)
@@ -575,7 +606,6 @@ internal class MeetingViewModel(
     private enum class CommandKind { Book, Close }
 
     private companion object {
-        const val FirstPageSize = 30
         val refreshIssues = setOf(
             MeetingIssue.Stale, MeetingIssue.Started, MeetingIssue.Closed, MeetingIssue.Gone,
             MeetingIssue.AlreadyBooked, MeetingIssue.InsufficientVotes, MeetingIssue.VoteRequired,
