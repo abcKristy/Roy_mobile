@@ -60,12 +60,13 @@ internal class IosAuthHttpTransport : AuthHttpTransport {
             val http = response as? NSHTTPURLResponse
             continuation.resume(
                 if (error == null && http != null) {
+                    val body = data?.boundedBytes(request.maxResponseBytes)
                     AuthHttpResponse(
-                        http.statusCode.toInt(),
-                        data?.utf8Text(request.maxResponseBytes).orEmpty(),
-                        http.allHeaderFields.entries.firstOrNull {
-                            (it.key as? String)?.equals("Retry-After", ignoreCase = true) == true
-                        }?.value as? String,
+                        status = http.statusCode.toInt(),
+                        body = if (request.isBinaryResponseExpected) "" else body?.decodeToString().orEmpty(),
+                        retryAfter = http.headerValue("Retry-After"),
+                        binaryBody = if (request.isBinaryResponseExpected && http.statusCode.toInt() == 200) body else null,
+                        contentType = http.headerValue("Content-Type"),
                     )
                 }
                 else null
@@ -90,9 +91,14 @@ internal class IosAuthHttpTransport : AuthHttpTransport {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private fun NSData.utf8Text(maxResponseBytes: Int): String {
-    if (length == 0UL || length > maxResponseBytes.toULong()) return ""
+private fun NSData.boundedBytes(maxResponseBytes: Int): ByteArray? {
+    if (length == 0UL || length > maxResponseBytes.toULong()) return null
     val result = ByteArray(length.toInt())
     result.usePinned { memcpy(it.addressOf(0), bytes, length) }
-    return result.decodeToString()
+    return result
 }
+
+@OptIn(ExperimentalForeignApi::class)
+private fun NSHTTPURLResponse.headerValue(name: String): String? =
+    allHeaderFields.entries.firstOrNull { (it.key as? String)?.equals(name, ignoreCase = true) == true }
+        ?.value as? String

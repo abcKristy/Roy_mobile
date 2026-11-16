@@ -12,6 +12,8 @@ import com.example.roy.data.chat.ChatListRemoteDataSource
 import com.example.roy.data.chat.ChatRealtimeClient
 import com.example.roy.data.chat.ChatWriteRemoteDataSource
 import com.example.roy.data.chat.createChatSocketTransport
+import com.example.roy.data.meetings.MeetingRemoteDataSource
+import com.example.roy.data.meetings.MeetingAvatarAdapter
 import com.example.roy.domain.chat.ChatListOperations
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.SessionStatus
@@ -28,6 +30,7 @@ import com.example.roy.presentation.navigation.AuthReturnCoordinator
 import com.example.roy.presentation.theme.RoyTheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.Res
 import roy.shared.generated.resources.auth_network
@@ -46,11 +49,14 @@ internal fun App(
     origin: String,
     transport: AuthHttpTransport,
     connectivity: Flow<Boolean>,
+    meetingTargets: Flow<MeetingNotificationTarget> = emptyFlow(),
 ) {
     val state by session.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val chatHistory = remember(origin, transport) { ChatHistoryRemoteDataSource(origin, transport) }
     val chatWriter = remember(origin, transport) { ChatWriteRemoteDataSource(origin, transport) }
+    val meetings = remember(origin, transport) { MeetingRemoteDataSource(origin, transport) }
+    val meetingAvatars = remember(origin, transport, session) { MeetingAvatarAdapter(origin, transport, session) }
     val chatList = remember(origin, transport, session) {
         ChatListOperations(session, ChatListRemoteDataSource(origin, transport))
     }
@@ -79,7 +85,8 @@ internal fun App(
             } else null
             RoyRootScreen(
                 session, points, location, current, continuation, createPoints, pointDetails, filterStore,
-                chatHistory, chatWriter, chatList, chatRealtime, connectivity, guestProfile,
+                chatHistory, chatWriter, chatList, chatRealtime, meetings, meetingAvatars::forScope,
+                connectivity, meetingTargets, guestProfile,
             )
         }
     }

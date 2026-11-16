@@ -9,6 +9,7 @@ import com.example.roy.domain.auth.AuthResult
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.SessionStatus
 import com.example.roy.domain.chat.ChatRealtimeEvent
+import com.example.roy.domain.chat.MeetingChangeKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -36,6 +37,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
@@ -83,6 +85,10 @@ internal class ChatRealtimeClient(
                 val chatId = when (event) {
                     is ChatRealtimeEvent.MessageCreated -> event.message.chatId
                     is ChatRealtimeEvent.AccessLost -> event.chatId
+                    is ChatRealtimeEvent.MeetingChanged -> {
+                        if (observer.activeChat != event.chatId) return@collect
+                        event.chatId
+                    }
                     ChatRealtimeEvent.ChatsChanged, ChatRealtimeEvent.Resync -> null
                 }
                 if (chatId == null || chatId in observer.chatIds) send(event)
@@ -245,7 +251,7 @@ internal class ChatRealtimeClient(
     private suspend fun receive(scopeId: Long, subscribed: Set<String>, text: String) {
         val frame = decodeFrame(text) ?: return
         val scope = frame["scope"] as? JsonObject ?: return
-        when (frame.field("type")) {
+        when (val type = frame.field("type")) {
             "chat.message.created" -> {
                 val room = scope.field("id")?.takeIf { scope.field("kind") == "chat" && it in subscribed } ?: return
                 val payload = frame["payload"] ?: return
@@ -267,6 +273,15 @@ internal class ChatRealtimeClient(
             }
             "point.changed", "point.deleted" -> {
                 emit(scopeId, ChatRealtimeEvent.ChatsChanged)
+            }
+            "proposal.updated", "booking.changed" -> {
+                val room = scope.field("id")?.takeIf { scope.field("kind") == "chat" && it in subscribed } ?: return
+                val payload = frame["payload"] as? JsonObject ?: return
+                val proposalId = payload.field("proposalId")?.takeIf { Uuid.parseOrNull(it)?.toString() == it } ?: return
+                val kind = if (type == "proposal.updated") MeetingChangeKind.ProposalUpdated else MeetingChangeKind.BookingChanged
+                val revision = (payload["revision"] as? JsonPrimitive)?.longOrNull?.takeIf { it >= 0 }
+                if (kind == MeetingChangeKind.ProposalUpdated && revision == null) return
+                emit(scopeId, ChatRealtimeEvent.MeetingChanged(room, proposalId, revision, kind))
             }
             "session.revoked" -> {
                 if (scope.field("kind") != "user") return

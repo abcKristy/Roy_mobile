@@ -40,6 +40,7 @@ internal class TopicChatViewModel(
     private val realtime: () -> Flow<ChatRealtimeEvent>,
     connectivity: Flow<Boolean>,
     private val onResync: () -> Unit,
+    private val onMeetingChange: (String?) -> Unit = {},
 ) : BaseViewModel<TopicChatViewState, TopicChatViewEvent, TopicChatViewAction>(TopicChatViewState()) {
     private var loadJob: Job? = null
     private var earlyMessages = emptyList<ChatMessage>()
@@ -50,6 +51,7 @@ internal class TopicChatViewModel(
     private var isResyncPending = false
     private var isResumed = false
     private var isClosed = false
+    private var isMeetingOverlayOpen = false
     private var lastRead = 0L
     private var pendingRead = 0L
     private var completeThrough: Long? = null
@@ -94,6 +96,10 @@ internal class TopicChatViewModel(
             TopicChatViewEvent.OnSearchSubmitted -> onSearchSubmitted()
             TopicChatViewEvent.OnSearchMore -> onSearchMore()
             is TopicChatViewEvent.OnVisibleMessage -> onVisibleMessage(event.seq)
+            is TopicChatViewEvent.OnMeetingOverlayChanged -> {
+                isMeetingOverlayOpen = event.isOpen
+                if (event.isOpen) stopRead()
+            }
             TopicChatViewEvent.OnLeaveRequested -> onLeaveRequested()
             TopicChatViewEvent.OnLeaveConfirmed -> onLeaveConfirmed()
             TopicChatViewEvent.OnLeaveDismissed -> onLeaveDismissed()
@@ -128,9 +134,16 @@ internal class TopicChatViewModel(
                     ChatRealtimeEvent.Resync, ChatRealtimeEvent.ChatsChanged -> {
                         onResync()
                         recheckAccess()
+                        onMeetingChange(null)
                     }
                     is ChatRealtimeEvent.MessageCreated -> onCanonicalMessage(event.message)
                     is ChatRealtimeEvent.AccessLost -> verifyAccess()
+                    is ChatRealtimeEvent.MeetingChanged -> {
+                        if (event.chatId == chatId) {
+                            onMeetingChange(event.proposalId)
+                            recheckAccess()
+                        }
+                    }
                 }
             }
         }
@@ -333,7 +346,7 @@ internal class TopicChatViewModel(
 
     private fun canRead(state: TopicChatViewState): Boolean =
         scopeIsCurrent() && isResumed && state.isOnline && state.canInteract && state.search == null &&
-            !state.isLeaveDialogOpen && state.reportTarget == null
+            !state.isLeaveDialogOpen && state.reportTarget == null && !isMeetingOverlayOpen
 
     private fun stopRead() {
         readJob?.cancel()
@@ -393,7 +406,7 @@ internal class TopicChatViewModel(
 
     private fun onSend() {
         val state = viewState.value
-        if (scopeIsCurrent() && isResumed && state.isOnline && state.canInteract && state.search == null &&
+        if (scopeIsCurrent() && isResumed && state.isOnline && state.canInteract && state.search == null && !isMeetingOverlayOpen &&
             !state.isLeaveDialogOpen && state.reportTarget == null
         ) composer.send()
     }

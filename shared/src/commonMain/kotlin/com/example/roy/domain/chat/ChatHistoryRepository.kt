@@ -34,6 +34,8 @@ internal data class ChatDetail(
     val userId: String,
     val lastReadMessageSeq: Long,
     val lastMessageSeq: Long,
+    val currentProposalId: String? = null,
+    val currentProposalRevision: Long? = null,
 )
 
 internal data class ChatMessage(
@@ -45,6 +47,8 @@ internal data class ChatMessage(
     val text: String?,
     val systemKind: String?,
     val createdAt: Instant,
+    val systemProposalId: String? = null,
+    val systemReason: String? = null,
 )
 
 internal data class ChatMessageAuthor(val id: String?, val displayName: String, val avatarUrl: String?)

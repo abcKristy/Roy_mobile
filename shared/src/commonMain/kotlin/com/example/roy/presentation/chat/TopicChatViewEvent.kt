@@ -12,6 +12,7 @@ internal sealed class TopicChatViewEvent {
     data object OnSearchSubmitted : TopicChatViewEvent()
     data object OnSearchMore : TopicChatViewEvent()
     data class OnVisibleMessage(val seq: Long) : TopicChatViewEvent()
+    data class OnMeetingOverlayChanged(val isOpen: Boolean) : TopicChatViewEvent()
     data object OnLeaveRequested : TopicChatViewEvent()
     data object OnLeaveConfirmed : TopicChatViewEvent()
     data object OnLeaveDismissed : TopicChatViewEvent()

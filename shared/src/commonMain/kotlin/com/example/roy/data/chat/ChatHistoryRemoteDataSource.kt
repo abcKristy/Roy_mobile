@@ -26,9 +26,11 @@ internal class ChatHistoryRemoteDataSource(
             val dto = AuthJson.decodeFromString<ChatDetailDto>(body)
             require(dto.id == chatId && dto.topic.chatId == chatId && dto.membership.chatId == chatId)
             require(dto.lastMessageSeq >= dto.membership.lastReadMessageSeq && dto.membership.lastReadMessageSeq >= 0)
+            require(dto.currentProposal == null || CHAT_ID.matches(dto.currentProposal.id) && dto.currentProposal.revision >= 0)
             ChatDetail(
                 dto.id, dto.pointId, dto.topic.id, dto.topic.label, dto.address, dto.membership.userId,
                 dto.membership.lastReadMessageSeq, dto.lastMessageSeq,
+                dto.currentProposal?.id, dto.currentProposal?.revision,
             )
         }
 
@@ -111,7 +113,11 @@ private data class ChatDetailDto(
     val address: String,
     val membership: ChatDetailMembershipDto,
     val lastMessageSeq: Long,
+    val currentProposal: ChatProposalPreviewDto? = null,
 )
+
+@Serializable
+private data class ChatProposalPreviewDto(val id: String, val revision: Long)
 
 @Serializable
 private data class ChatDetailTopicDto(val id: String, val label: String, val chatId: String)

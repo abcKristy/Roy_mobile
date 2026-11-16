@@ -1,0 +1,25 @@
+package com.example.roy.presentation.meetings
+
+internal sealed class MeetingViewEvent {
+    data class OnAccessChanged(val canAccess: Boolean, val viewerId: String?, val isOnline: Boolean) : MeetingViewEvent()
+    data object OnRefresh : MeetingViewEvent()
+    data object OnMeetingsRequested : MeetingViewEvent()
+    data object OnDismiss : MeetingViewEvent()
+    data object OnCreateRequested : MeetingViewEvent()
+    data class OnDateChanged(val date: String) : MeetingViewEvent()
+    data class OnTimeChanged(val time: String) : MeetingViewEvent()
+    data class OnDurationChanged(val minutes: Int?) : MeetingViewEvent()
+    data class OnCustomDurationChanged(val minutes: String) : MeetingViewEvent()
+    data object OnCreateConfirmed : MeetingViewEvent()
+    data object OnProposalsLoadMore : MeetingViewEvent()
+    data object OnVotersLoadMore : MeetingViewEvent()
+    data object OnVotersRetry : MeetingViewEvent()
+    data class OnProposalSelected(val proposalId: String) : MeetingViewEvent()
+    data class OnVote(val proposalId: String) : MeetingViewEvent()
+    data class OnVotersRequested(val proposalId: String) : MeetingViewEvent()
+    data class OnBookRequested(val proposalId: String) : MeetingViewEvent()
+    data object OnBookConfirmed : MeetingViewEvent()
+    data object OnOverlapConfirmed : MeetingViewEvent()
+    data class OnCloseRequested(val proposalId: String) : MeetingViewEvent()
+    data object OnCloseConfirmed : MeetingViewEvent()
+}

@@ -34,7 +34,14 @@ import roy.shared.generated.resources.protected_back
 import roy.shared.generated.resources.chat_title
 
 @Composable
-internal fun TopicChatView(viewState: TopicChatViewState, eventHandler: (TopicChatViewEvent) -> Unit) {
+internal fun TopicChatView(
+    viewState: TopicChatViewState,
+    meetingAction: (@Composable () -> Unit)? = null,
+    pinnedMeeting: (@Composable () -> Unit)? = null,
+    onOpenMeeting: ((String) -> Unit)? = null,
+    isHistoryBehindMeetingSheet: Boolean = false,
+    eventHandler: (TopicChatViewEvent) -> Unit,
+) {
     val colors = RoyTheme.colors
     val typography = RoyTheme.typography
     val spacing = RoyTheme.dimensions.spacing
@@ -57,6 +64,7 @@ internal fun TopicChatView(viewState: TopicChatViewState, eventHandler: (TopicCh
         visibleDetail?.let { chat ->
             BasicText(chat.address, style = typography.bodySmall.copy(color = colors.textSecondary))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
+                meetingAction?.invoke()
                 TertiaryButton(
                     label = stringResource(Res.string.chat_search),
                     onClick = { eventHandler(TopicChatViewEvent.OnOpenSearch) },
@@ -69,6 +77,7 @@ internal fun TopicChatView(viewState: TopicChatViewState, eventHandler: (TopicCh
                 )
             }
         }
+        pinnedMeeting?.invoke()
         if (viewState.isLoading && visibleDetail != null) {
             LoadingState(LoadingMode.Inline, stringResource(Res.string.chat_history_loading))
         }
@@ -77,7 +86,13 @@ internal fun TopicChatView(viewState: TopicChatViewState, eventHandler: (TopicCh
         }
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             when {
-                !viewState.isAccessUncertain && viewState.messages.isNotEmpty() -> ChatHistoryList(viewState, listState, eventHandler)
+                !viewState.isAccessUncertain && viewState.messages.isNotEmpty() -> ChatHistoryList(
+                    viewState = viewState,
+                    listState = listState,
+                    eventHandler = eventHandler,
+                    isHistoryBehindMeetingSheet = isHistoryBehindMeetingSheet,
+                    onOpenMeeting = onOpenMeeting,
+                )
                 viewState.isLoading -> LoadingState(LoadingMode.Fullscreen, stringResource(Res.string.chat_history_loading))
                 viewState.historyIssue != null -> {
                     val issue = viewState.historyIssue

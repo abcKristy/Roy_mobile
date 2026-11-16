@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.roy.App
+import com.example.roy.MeetingNotificationTarget
 import com.example.roy.data.auth.AndroidAuthHttpTransport
 import com.example.roy.data.auth.AndroidSessionStore
 import com.example.roy.data.auth.AuthHttpTransport
@@ -12,6 +13,7 @@ import com.example.roy.data.auth.AuthRemoteDataSource
 import com.example.roy.data.filters.FilterPreferencesStore
 import com.example.roy.data.chat.chatConnectivity
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.data.points.PointRemoteDataSource
 import com.example.roy.data.points.CreatePointRemoteDataSource
@@ -25,7 +27,7 @@ import com.example.roy.location.rememberAndroidDeviceLocation
 import com.example.roy.presentation.navigation.AuthReturnCoordinator
 
 @Composable
-fun RoyAndroidApp(context: Context, origin: String?) {
+fun RoyAndroidApp(context: Context, origin: String?, meetingTargets: Flow<MeetingNotificationTarget> = emptyFlow()) {
     val model = viewModel {
         val apiOrigin = origin ?: "https://roy.invalid"
         val transport = AndroidAuthHttpTransport()
@@ -54,6 +56,7 @@ fun RoyAndroidApp(context: Context, origin: String?) {
     App(
         model.session, model.points, rememberAndroidDeviceLocation(context), model.continuation,
         model.createPoints, model.pointDetails, model.filterStore, model.origin, model.transport, model.connectivity,
+        meetingTargets,
     )
 }
 

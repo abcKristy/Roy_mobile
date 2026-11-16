@@ -38,6 +38,8 @@ internal fun ChatHistoryList(
     viewState: TopicChatViewState,
     listState: LazyListState,
     eventHandler: (TopicChatViewEvent) -> Unit,
+    isHistoryBehindMeetingSheet: Boolean = false,
+    onOpenMeeting: ((String) -> Unit)? = null,
 ) {
     val spacing = RoyTheme.dimensions.spacing
     val messagesById by rememberUpdatedState(remember(viewState.messages) { viewState.messages.associateBy(ChatMessage::id) })
@@ -50,7 +52,7 @@ internal fun ChatHistoryList(
         lastNewestId = newestId
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val canAdvance = viewState.isOnline && viewState.canInteract && viewState.search == null &&
+    val canAdvance = !isHistoryBehindMeetingSheet && viewState.isOnline && viewState.canInteract && viewState.search == null &&
         !viewState.isLeaveDialogOpen && viewState.reportTarget == null
     LaunchedEffect(listState, lifecycle, canAdvance) {
         if (!canAdvance) return@LaunchedEffect
@@ -89,6 +91,7 @@ internal fun ChatHistoryList(
                 currentUserId = viewState.detail?.userId,
                 isReportEnabled = viewState.canInteract,
                 eventHandler = eventHandler,
+                onOpenMeeting = onOpenMeeting.takeIf { viewState.canInteract },
             )
         }
         if (viewState.nextBeforeSeq != null) {

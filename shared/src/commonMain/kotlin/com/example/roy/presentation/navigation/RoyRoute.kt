@@ -23,6 +23,7 @@ internal sealed interface RoyRoute {
         val chatId: String,
         val isMember: Boolean,
         val scopeId: Long,
+        val proposalId: String? = null,
     ) : RoyRoute
     @Serializable data class ProtectedAuth(val flowId: Long) : RoyRoute
     @Serializable data object ProtectedTarget : RoyRoute

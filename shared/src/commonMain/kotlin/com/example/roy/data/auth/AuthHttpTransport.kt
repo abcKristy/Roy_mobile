@@ -14,9 +14,16 @@ internal class AuthHttpRequest(
     val accessToken: String?,
     val maxResponseBytes: Int = MaxAuthResponseBytes,
     val headers: Map<String, String> = emptyMap(),
+    val isBinaryResponseExpected: Boolean = false,
 )
 
-internal class AuthHttpResponse(val status: Int, val body: String, val retryAfter: String? = null)
+internal class AuthHttpResponse(
+    val status: Int,
+    val body: String,
+    val retryAfter: String? = null,
+    val binaryBody: ByteArray? = null,
+    val contentType: String? = null,
+)
 
 /** Returns null when no HTTP response is available. Implementations never follow redirects. */
 internal fun interface AuthHttpTransport {

@@ -1,6 +1,8 @@
 package com.example.roy.presentation.shell
 
 import androidx.compose.runtime.Composable
+import com.example.roy.MeetingNotificationTarget
+import com.example.roy.domain.auth.AuthResult
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,12 +42,18 @@ import com.example.roy.presentation.navigation.RoyRoute
 import com.example.roy.presentation.components.overlays.RoySnackbarHostState
 import com.example.roy.presentation.components.overlays.RoySnackbarMessage
 import com.example.roy.presentation.core.CollectMviActions
+import com.example.roy.presentation.components.feedback.LoadingMode
+import com.example.roy.presentation.components.feedback.LoadingState
 import com.example.roy.presentation.navigation.MainTab
 import com.example.roy.presentation.navigation.AuthReturnCoordinator
 import com.example.roy.presentation.navigation.PendingProtectedIntent
 import com.example.roy.presentation.navigation.ProtectedNavigation
 import com.example.roy.data.chat.ChatRealtimeClient
+import com.example.roy.domain.meetings.MeetingRepository
+import com.example.roy.domain.meetings.MeetingVoterAvatarLoader
+import com.example.roy.presentation.meetings.MeetingViewModel
 import com.example.roy.domain.chat.ChatHistoryRepository
+import com.example.roy.domain.chat.ChatReadReply
 import com.example.roy.domain.chat.ChatListOperations
 import com.example.roy.domain.chat.ChatReadCursor
 import com.example.roy.domain.chat.ChatWriteRepository
@@ -65,6 +73,7 @@ import com.example.roy.presentation.navigation.openTab
 import kotlinx.coroutines.flow.Flow
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.Res
+import roy.shared.generated.resources.auth_restore
 import roy.shared.generated.resources.map_point_gone
 
 @Composable
@@ -81,7 +90,10 @@ internal fun RoyRootScreen(
     chatWriter: ChatWriteRepository,
     chatList: ChatListOperations,
     chatRealtime: ChatRealtimeClient,
+    meetings: MeetingRepository,
+    meetingAvatarsForScope: (Long) -> MeetingVoterAvatarLoader,
     connectivity: Flow<Boolean>,
+    meetingTargets: Flow<MeetingNotificationTarget>,
     guestProfile: (@Composable () -> Unit)? = null,
 ) {
     val owner = remember {
@@ -120,10 +132,10 @@ internal fun RoyRootScreen(
         }
     }
 
-    fun openChat(pointId: String, topicId: String, chatId: String) {
+    fun openChat(pointId: String, topicId: String, chatId: String, proposalId: String? = null) {
         val active = session.state.value as? SessionStatus.Active ?: return
-        navController.navigate(RoyRoute.TopicChat(pointId, topicId, chatId, isMember = true, scopeId = active.scopeId)) {
-            launchSingleTop = true
+        navController.navigate(RoyRoute.TopicChat(pointId, topicId, chatId, isMember = true, scopeId = active.scopeId, proposalId = proposalId)) {
+            launchSingleTop = proposalId == null
         }
     }
 
@@ -139,7 +151,7 @@ internal fun RoyRootScreen(
             is ProtectedNavigation.Continue -> {
                 if ((session.state.value as? SessionStatus.Active)?.scopeId != effect.scopeId) return
                 when (val intent = effect.intent) {
-                    is PendingProtectedIntent.CreatePoint -> {
+                    is PendingProtectedIntent.CreatePoint, is PendingProtectedIntent.OpenMeeting -> {
                         continuation.showTarget(effect)
                         navController.navigate(RoyRoute.ProtectedTarget) { launchSingleTop = true }
                     }
@@ -168,6 +180,12 @@ internal fun RoyRootScreen(
             navigate(continuation.onSessionExpired(expiration) ?: effect)
         } else {
             navigate(effect)
+        }
+    }
+
+    LaunchedEffect(meetingTargets) {
+        meetingTargets.collect { target ->
+            navigate(continuation.request(PendingProtectedIntent.OpenMeeting(target), session.state.value))
         }
     }
 
@@ -302,12 +320,16 @@ internal fun RoyRootScreen(
                             entry.toRoute<RoyRoute.TopicChat>() == route
                     }
                     if (route.isMember && (sessionStatus as? SessionStatus.Active)?.scopeId == route.scopeId) {
+                        val meetingModel = viewModel(key = "meetings/" + route.scopeId + "/" + route.chatId + "/" + route.proposalId) {
+                            MeetingViewModel(route.scopeId, route.chatId, session, chatHistory, meetings, route.proposalId)
+                        }
                         val chatModel = viewModel(key = "chat/" + route.scopeId + "/" + route.chatId) {
                             TopicChatViewModel(
                                 route.scopeId, route.pointId, route.topicId, route.chatId, session, chatHistory,
                                 pointDetails, ChatReadCursor(route.scopeId, route.chatId, chatList), chatWriter,
                                 { chatRealtime.events(route.scopeId, route.chatId) }, connectivity,
                                 { listModel?.handleEvent(ChatListViewEvent.Refresh) },
+                                meetingModel::onRealtimeChange,
                             )
                         }
                         fun onMembershipChanged(result: LeaveTopicResult) {
@@ -333,6 +355,10 @@ internal fun RoyRootScreen(
                                 }
                             },
                             onAccessLost = ::onMembershipChanged,
+                            meetings = meetingModel,
+                            loadVoterAvatar = remember(route.scopeId, meetingAvatarsForScope) {
+                                meetingAvatarsForScope(route.scopeId)
+                            },
                             reportContent = { target, onDismiss ->
                                 val report = viewModel(key = "report/" + route.scopeId + "/" + route.chatId + "/" + target.userId) {
                                     ChatReportViewModel(target, route.chatId, route.scopeId, session, chatWriter)
@@ -376,7 +402,24 @@ internal fun RoyRootScreen(
                 protectedTarget = {
                     val current = continuation.currentTarget
                     val intent = current?.intent as? PendingProtectedIntent.CreatePoint
-                    if (current != null && intent != null && (sessionStatus as? SessionStatus.Active)?.scopeId == current.scopeId) {
+                    val meeting = (current?.intent as? PendingProtectedIntent.OpenMeeting)?.target
+                    if (current != null && meeting != null && sessionStatus == SessionStatus.Active(current.scopeId)) {
+                        LoadingState(LoadingMode.Fullscreen, stringResource(Res.string.auth_restore))
+                        LaunchedEffect(current) {
+                            val result = session.readProtected(current.scopeId) { chatHistory.detail(meeting.chatId, it) }
+                            if (!isCurrentTarget(current) || session.state.value != SessionStatus.Active(current.scopeId)) {
+                                return@LaunchedEffect
+                            }
+                            val detail = ((result as? AuthResult.Success)?.value as? ChatReadReply.Data)?.value
+                            continuation.clearTarget()
+                            navController.popBackStack()
+                            if (detail != null && detail.id == meeting.chatId && detail.pointId == meeting.pointId) {
+                                openChat(detail.pointId, detail.topicId, detail.id, meeting.proposalId)
+                            } else {
+                                snackbar.show(RoySnackbarMessage(++snackbarMessageId, goneMessage))
+                            }
+                        }
+                    } else if (current != null && intent != null && (sessionStatus as? SessionStatus.Active)?.scopeId == current.scopeId) {
                         val createModel = viewModel {
                             CreatePointViewModel(intent.position, CreatePointUseCase(createPoints, session, current.scopeId))
                         }

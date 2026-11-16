@@ -14,11 +14,13 @@ import com.example.roy.domain.chat.ChatMessage
 import com.example.roy.presentation.components.TertiaryButton
 import com.example.roy.presentation.components.cards.RoyCard
 import com.example.roy.presentation.theme.RoyTheme
+import com.example.roy.presentation.meetings.meetingCancelReasonResource
 import com.example.roy.presentation.core.formatLocalDateTime
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import roy.shared.generated.resources.Res
 import roy.shared.generated.resources.chat_author_deleted
+import roy.shared.generated.resources.meetings_detail
 import roy.shared.generated.resources.chat_message_report
 import roy.shared.generated.resources.chat_system_booking_cancelled
 import roy.shared.generated.resources.chat_system_default
@@ -36,6 +38,7 @@ internal fun TopicChatMessageCard(
     currentUserId: String?,
     isReportEnabled: Boolean,
     eventHandler: (TopicChatViewEvent) -> Unit,
+    onOpenMeeting: ((String) -> Unit)? = null,
 ) {
     val typography = RoyTheme.typography
     val colors = RoyTheme.colors
@@ -50,7 +53,22 @@ internal fun TopicChatMessageCard(
                 stringResource(chatSystemMessageLabel(message.systemKind)),
                 style = typography.bodySmall.copy(color = colors.textSecondary, textAlign = TextAlign.Center),
             )
+            if (message.systemKind == "meeting_booking_cancelled") {
+                meetingCancelReasonResource(message.systemReason)?.let { reason ->
+                    BasicText(
+                        stringResource(reason),
+                        style = typography.bodySmall.copy(color = colors.textSecondary, textAlign = TextAlign.Center),
+                    )
+                }
+            }
             MessageTime(message)
+            val proposalId = message.systemProposalId
+            if (proposalId != null && onOpenMeeting != null) {
+                TertiaryButton(
+                    label = stringResource(Res.string.meetings_detail),
+                    onClick = { onOpenMeeting(proposalId) },
+                )
+            }
         }
         return
     }

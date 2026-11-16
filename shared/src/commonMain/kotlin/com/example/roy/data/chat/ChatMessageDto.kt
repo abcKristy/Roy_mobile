@@ -27,6 +27,8 @@ internal data class ChatMessageDto(
             text = text,
             systemKind = system?.kind,
             createdAt = Instant.parse(createdAt),
+            systemProposalId = system?.proposalId,
+            systemReason = system?.reason,
         )
     }
 }
@@ -35,4 +37,8 @@ internal data class ChatMessageDto(
 internal data class ChatMessageAuthorDto(val id: String?, val displayName: String, val avatarUrl: String? = null)
 
 @Serializable
-internal data class ChatMessageSystemDto(val kind: String? = null)
+internal data class ChatMessageSystemDto(
+    val kind: String? = null,
+    val proposalId: String? = null,
+    val reason: String? = null,
+)
