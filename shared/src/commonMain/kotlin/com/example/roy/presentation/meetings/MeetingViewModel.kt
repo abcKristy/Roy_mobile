@@ -533,9 +533,13 @@ internal class MeetingViewModel(
         updateState { state ->
             val upcoming = snapshots.values.filter { it.status != "closed" && it.startsAt > now }
             val canWrite = authorized() && state.isOnline
-            state.copy(
+            val selected = state.sheet?.proposalId?.let(snapshots::get)
+            val confirmation = if (selected != null && state.busyProposalId == null) {
+                reconcileConfirmation(state, selected)
+            } else state
+            confirmation.copy(
                 currentProposal = pinId?.let(snapshots::get)?.takeIf { it.startsAt > now },
-                selectedProposal = state.sheet?.proposalId?.let(snapshots::get),
+                selectedProposal = selected,
                 proposals = state.proposals.mapNotNull { snapshots[it.id] },
                 canCreate = canWrite,
                 votableIds = if (canWrite) upcoming.mapTo(mutableSetOf(), MeetingProposal::id) else emptySet(),
@@ -545,6 +549,23 @@ internal class MeetingViewModel(
                     .mapTo(mutableSetOf(), MeetingProposal::id) else emptySet(),
             )
         }
+    }
+
+    private fun reconcileConfirmation(state: MeetingViewState, proposal: MeetingProposal): MeetingViewState {
+        val booking = proposal.booking
+        val issue = when (state.sheet) {
+            is MeetingSheet.Booking, is MeetingSheet.Overlap -> when {
+                booking?.status == "active" && booking.bookedByUserId == state.viewerId -> null
+                booking?.status == "active" -> MeetingIssue.AlreadyBooked
+                proposal.status == "closed" -> MeetingIssue.Closed
+                proposal.status != "ready_to_book" -> MeetingIssue.InsufficientVotes
+                !proposal.viewerGoing -> MeetingIssue.VoteRequired
+                else -> return state
+            }
+            is MeetingSheet.Close -> if (proposal.status == "closed") null else return state
+            else -> return state
+        }
+        return state.copy(sheet = MeetingSheet.Detail(proposal.id), issue = issue)
     }
 
     private fun showIssue(issue: MeetingIssue) = updateState { it.copy(issue = issue) }

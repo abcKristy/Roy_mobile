@@ -2,6 +2,8 @@ package com.example.roy.presentation.meetings
 
 import androidx.lifecycle.viewModelScope
 import com.example.roy.domain.auth.AuthResult
+import com.example.roy.domain.auth.AuthError
+import com.example.roy.domain.auth.AuthErrorCode
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.SessionStatus
 import com.example.roy.domain.auth.SessionTestRepository
@@ -10,6 +12,7 @@ import com.example.roy.domain.chat.ChatDetail
 import com.example.roy.domain.chat.ChatHistoryRepository
 import com.example.roy.domain.chat.ChatReadReply
 import com.example.roy.domain.meetings.MeetingOverlap
+import com.example.roy.domain.meetings.MeetingBooking
 import com.example.roy.domain.meetings.MeetingPage
 import com.example.roy.domain.meetings.MeetingProposal
 import com.example.roy.domain.meetings.MeetingRejection
@@ -81,11 +84,33 @@ class MeetingViewModelTest {
         }
     }
 
+    @Test
+    fun lostBookingResponseOpensCanonicalBookingAfterRefreshWithoutAnotherWrite() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val fixture = Fixture().apply { loseBookingResponse = true }
+        val model = fixture.model()
+        try {
+            model.handleEvent(access)
+            runCurrent()
+            model.handleEvent(MeetingViewEvent.OnBookRequested("row"))
+            model.handleEvent(MeetingViewEvent.OnBookConfirmed)
+            runCurrent()
+            assertEquals(listOf(Command(false, 3L, "key")), fixture.commands)
+            assertEquals(MeetingSheet.Detail("row"), model.viewState.value.sheet)
+            assertEquals("booking", model.viewState.value.selectedProposal?.booking?.id)
+            assertNull(model.viewState.value.issue)
+        } finally {
+            model.viewModelScope.cancel()
+            Dispatchers.resetMain()
+        }
+    }
+
     private data class Command(val confirm: Boolean, val revision: Long, val key: String)
 
     private class Fixture : MeetingRepository {
         val commands = mutableListOf<Command>()
         var row = proposal("row")
+        var loseBookingResponse = false
         private val pin = proposal("pin")
 
         suspend fun model(initialProposal: String? = null): MeetingViewModel {
@@ -123,6 +148,11 @@ class MeetingViewModelTest {
             proposalId: String, confirmOverlap: Boolean, expectedRevision: Long, key: String, token: String,
         ): AuthResult<MeetingReply<MeetingProposal>> {
             commands += Command(confirmOverlap, expectedRevision, key)
+            if (loseBookingResponse) {
+                val booking = MeetingBooking("booking", "row", "viewer", "active", 1L, emptyList(), now, null, null)
+                row = row.copy(status = "booked", booking = booking, revision = row.revision + 1)
+                return AuthResult.Failure(AuthError(AuthErrorCode.Network))
+            }
             val conflict = MeetingOverlap("booking", "other", row.startsAt, row.endsAt, now, 1L)
             return AuthResult.Success(if (confirmOverlap) MeetingReply.Rejected(MeetingRejection.Stale)
                 else MeetingReply.OverlapRequired(listOf(conflict)))
