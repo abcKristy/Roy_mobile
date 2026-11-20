@@ -5,7 +5,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.uikit.LocalUIViewController
-import com.example.roy.domain.profile.MaxProfileAvatarBytes
+import com.example.roy.domain.profile.MAX_PROFILE_AVATAR_BYTES
 import com.example.roy.domain.profile.PickImageResult
 import com.example.roy.domain.profile.ProfileProblem
 import kotlinx.cinterop.BetaInteropApi
@@ -83,10 +83,10 @@ private class ProfilePickerDelegate(private val result: (PickImageResult) -> Uni
     private fun readImage(path: String): PickImageResult {
         val input = fopen(path, "rb") ?: return PickImageResult.Failure(ProfileProblem.InvalidImage)
         try {
-            val bytes = ByteArray(MaxProfileAvatarBytes + 1)
+            val bytes = ByteArray(MAX_PROFILE_AVATAR_BYTES + 1)
             val count = bytes.usePinned { fread(it.addressOf(0), 1UL, bytes.size.toULong(), input).toInt() }
             if (ferror(input) != 0) return PickImageResult.Failure(ProfileProblem.InvalidImage)
-            return if (count > MaxProfileAvatarBytes) PickImageResult.Failure(ProfileProblem.TooLarge)
+            return if (count > MAX_PROFILE_AVATAR_BYTES) PickImageResult.Failure(ProfileProblem.TooLarge)
             else pickedProfileImage(bytes.copyOf(count))
         } finally {
             fclose(input)

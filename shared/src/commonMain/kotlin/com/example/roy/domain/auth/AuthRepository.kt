@@ -17,6 +17,7 @@ internal class AuthSession(
     val refreshToken: String,
     val refreshExpiresAt: Instant,
     val user: AuthUser,
+    val isOfflineRestoreAllowed: Boolean = true,
 )
 
 internal class AuthUser(

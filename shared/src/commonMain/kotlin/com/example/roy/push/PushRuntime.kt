@@ -1,5 +1,6 @@
 package com.example.roy.push
 
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -16,7 +17,7 @@ class PushRuntime(
 ) {
     private val authorizationState = MutableStateFlow(PushAuthorization.NotAsked)
     private val tokenState = MutableStateFlow<String?>(null)
-    val authorization = authorizationState.asStateFlow()
+    val authorization: StateFlow<PushAuthorization> = authorizationState.asStateFlow()
     internal val token = tokenState.asStateFlow()
     internal var hasRegistration = initiallyRegistered
         private set
@@ -26,7 +27,7 @@ class PushRuntime(
         persistRegistration(registered)
     }
 
-    fun requestPermission() = requestAuthorization()
+    fun requestPermission(): Unit = requestAuthorization()
 
     internal fun updateAccount(userId: String?) = onAccountChanged(userId)
 

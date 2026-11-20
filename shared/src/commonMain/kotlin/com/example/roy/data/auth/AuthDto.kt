@@ -44,10 +44,12 @@ internal class SessionDto(
     val refreshToken: String,
     val refreshExpiresAt: String,
     val user: UserDto,
+    val isOfflineRestoreAllowed: Boolean = true,
 ) {
     fun toDomain(): AuthSession {
         require(accessToken.isNotBlank() && refreshToken.isNotBlank())
-        return AuthSession(accessToken, Instant.parse(expiresAt), refreshToken, Instant.parse(refreshExpiresAt), user.toDomain())
+        return AuthSession(accessToken, Instant.parse(expiresAt), refreshToken, Instant.parse(refreshExpiresAt),
+            user.toDomain(), isOfflineRestoreAllowed)
     }
 }
 
@@ -73,6 +75,7 @@ internal object AuthSessionCodec {
             expiresAt = session.expiresAt.toString(),
             refreshToken = session.refreshToken,
             refreshExpiresAt = session.refreshExpiresAt.toString(),
+            isOfflineRestoreAllowed = session.isOfflineRestoreAllowed,
             user = with(session.user) {
                 UserDto(id, displayName, avatarUrl, phone, ageYears, messageMutedUntil?.toString(), createdAt.toString())
             },

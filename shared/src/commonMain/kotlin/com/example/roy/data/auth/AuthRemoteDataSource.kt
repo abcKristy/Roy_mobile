@@ -73,8 +73,8 @@ internal class AuthRemoteDataSource(
     }
 
     private fun isPolicyDocumentUrl(url: String): Boolean {
-        if (!url.endsWith(PolicyDocumentPath)) return false
-        val documentOrigin = url.removeSuffix(PolicyDocumentPath)
+        if (!url.endsWith(POLICY_DOCUMENT_PATH)) return false
+        val documentOrigin = url.removeSuffix(POLICY_DOCUMENT_PATH)
         return documentOrigin == origin || documentOrigin.isOrigin(SecureOrigin)
     }
 
@@ -114,6 +114,6 @@ internal class AuthRemoteDataSource(
     private companion object {
         val SecureOrigin = Regex("""https://[A-Za-z0-9.-]+(?::([0-9]{1,5}))?""")
         val LocalOrigin = Regex("""http://127\.0\.0\.1(?::([0-9]{1,5}))?""")
-        const val PolicyDocumentPath = "/api/v1/legal/privacy/document"
+        const val POLICY_DOCUMENT_PATH = "/api/v1/legal/privacy/document"
     }
 }

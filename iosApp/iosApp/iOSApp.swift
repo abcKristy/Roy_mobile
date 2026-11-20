@@ -32,7 +32,8 @@ final class RoyAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationC
             notificationId: data["notificationId"] as? String,
             pointId: data["pointId"] as? String,
             chatId: data["chatId"] as? String,
-            proposalId: data["proposalId"] as? String
+            proposalId: data["proposalId"] as? String,
+            recipientBinding: data["recipientBinding"] as? String
         )
         completionHandler()
     }

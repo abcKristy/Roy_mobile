@@ -20,3 +20,19 @@ internal fun AuthRegistrationPreview() {
         AuthView(AuthViewState(AuthMode.Register), emptyMap(), null, "") {}
     }
 }
+
+@Preview(name = "Login dark")
+@Composable
+internal fun AuthLoginPreviewPaired() {
+    RoyTheme(darkTheme = true) {
+        AuthView(AuthViewState(AuthMode.Login), emptyMap(), null, "") {}
+    }
+}
+
+@Preview(name = "Registration light")
+@Composable
+internal fun AuthRegistrationPreviewPaired() {
+    RoyTheme(darkTheme = false) {
+        AuthView(AuthViewState(AuthMode.Register), emptyMap(), null, "") {}
+    }
+}

@@ -3,7 +3,6 @@ package com.example.roy.domain.auth
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertSame
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -12,6 +11,93 @@ import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionLogoutTest {
+    @Test
+    fun failedClearPurgesPrivateCacheAndCannotRestoreRevokedSessionOffline() = runTest {
+        val repository = SessionTestRepository()
+        val store = object : SessionStore {
+            var snapshot: AuthSession? = repository.first
+            override suspend fun read() = snapshot
+            override suspend fun replace(session: AuthSession) { snapshot = session }
+            override suspend fun clear() { error("fixture clear failure") }
+        }
+        var purges = 0
+        val coordinator = SessionCoordinator(repository, store, { purges++ }, allowOfflineRestore = true)
+        coordinator.restore()
+        repository.revoke = { AuthResult.Success(Unit) }
+
+        assertEquals(AuthErrorCode.Storage, assertIs<AuthResult.Failure>(coordinator.logout()).error.code)
+        assertEquals(1, purges)
+        val restarted = SessionCoordinator(repository, store, allowOfflineRestore = true)
+        restarted.setOnline(false)
+        restarted.restore()
+        assertEquals(SessionStatus.VerificationUnavailable, restarted.state.value)
+    }
+
+    @Test
+    fun failedLogoutIntentWriteDoesNotRevokeServerSession() = runTest {
+        val repository = SessionTestRepository()
+        val store = SessionTestStore().apply { saved = repository.first }
+        val coordinator = SessionCoordinator(repository, store, allowOfflineRestore = true)
+        coordinator.restore()
+        val active = coordinator.state.value
+        var revocations = 0
+        repository.revoke = { revocations++; AuthResult.Success(Unit) }
+        store.beforeWrite = { error("fixture intent write failure") }
+
+        assertEquals(AuthErrorCode.Storage, assertIs<AuthResult.Failure>(coordinator.logout()).error.code)
+        assertEquals(0, revocations)
+        assertEquals(active, coordinator.state.value)
+    }
+
+    @Test
+    fun onlySuccessfulOnlineVerificationReenablesOfflineRestoreAfterUncertainLogout() = runTest {
+        val repository = SessionTestRepository()
+        val store = SessionTestStore().apply { saved = repository.first }
+        val coordinator = SessionCoordinator(repository, store, allowOfflineRestore = true)
+        coordinator.restore()
+        repository.revoke = { AuthResult.Failure(AuthError(AuthErrorCode.Network)) }
+        assertIs<AuthResult.Failure>(coordinator.logout())
+
+        val offlineRestart = SessionCoordinator(repository, store, allowOfflineRestore = true)
+        offlineRestart.setOnline(false)
+        offlineRestart.restore()
+        assertEquals(SessionStatus.VerificationUnavailable, offlineRestart.state.value)
+        offlineRestart.setOnline(true)
+        offlineRestart.restore()
+        assertIs<SessionStatus.Active>(offlineRestart.state.value)
+        val verifiedOfflineRestart = SessionCoordinator(repository, store, allowOfflineRestore = true)
+        verifiedOfflineRestart.setOnline(false)
+        verifiedOfflineRestart.restore()
+        assertIs<SessionStatus.Active>(verifiedOfflineRestart.state.value)
+    }
+
+    @Test
+    fun terminalRevocationMarksSnapshotAndAttemptsEveryPrivateCleanup() = runTest {
+        val repository = SessionTestRepository()
+        val store = object : SessionStore {
+            var snapshot: AuthSession? = repository.first
+            override suspend fun read() = snapshot
+            override suspend fun replace(session: AuthSession) { snapshot = session }
+            override suspend fun clear() { error("fixture clear failure") }
+        }
+        var purges = 0
+        var bindingFailure = false
+        val coordinator = SessionCoordinator(repository, store, { purges++ }, allowOfflineRestore = true,
+            onAccountChanged = { if (bindingFailure) error("fixture binding failure") })
+        coordinator.restore()
+        val scope = assertIs<SessionStatus.Active>(coordinator.state.value).scopeId
+        bindingFailure = true
+        coordinator.invalidateRevokedScope(scope, repository.user.id)
+
+        assertEquals(1, purges)
+        assertEquals(SessionStatus.StorageUnavailable, coordinator.state.value)
+        assertEquals(false, store.snapshot?.isOfflineRestoreAllowed)
+        val restarted = SessionCoordinator(repository, store, allowOfflineRestore = true)
+        restarted.setOnline(false)
+        restarted.restore()
+        assertEquals(SessionStatus.VerificationUnavailable, restarted.state.value)
+    }
+
     @Test
     fun logoutWaitsForRotationThenRevokesAndClearsTheNewPair() = runTest {
         val repository = SessionTestRepository()
@@ -81,7 +167,8 @@ class SessionLogoutTest {
         val restarted = SessionCoordinator(repository, store)
         restarted.restore()
         assertEquals(SessionStatus.VerificationUnavailable, restarted.state.value)
-        assertSame(repository.first, store.read())
+        assertEquals(repository.first.accessToken, store.read()?.accessToken)
+        assertEquals(false, store.read()?.isOfflineRestoreAllowed)
     }
 
     @Test
@@ -97,7 +184,8 @@ class SessionLogoutTest {
         assertIs<AuthResult.Failure>(coordinator.logout())
 
         assertEquals(1, revokes)
-        assertSame(repository.first, store.saved)
+        assertEquals(repository.first.accessToken, store.saved?.accessToken)
+        assertEquals(false, store.saved?.isOfflineRestoreAllowed)
         assertIs<SessionStatus.Active>(coordinator.state.value)
     }
 }

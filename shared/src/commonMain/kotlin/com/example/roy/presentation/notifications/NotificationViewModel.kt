@@ -11,7 +11,6 @@ import com.example.roy.domain.notifications.NotificationEntry
 import com.example.roy.domain.notifications.NotificationRepository
 import com.example.roy.domain.notifications.NotificationSettings
 import com.example.roy.domain.notifications.NotificationSettingsWrite
-import com.example.roy.domain.notifications.NotificationTarget
 import com.example.roy.presentation.core.BaseViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
@@ -22,36 +21,6 @@ import kotlinx.coroutines.launch
 
 internal enum class NotificationMode { Settings, Center }
 internal enum class NotificationIssue { Offline, Conflict, InvalidCursor, Unavailable, TargetUnavailable }
-
-internal data class NotificationViewState(
-    val settings: NotificationSettings? = null,
-    val items: List<NotificationEntry> = emptyList(),
-    val nextCursor: String? = null,
-    val online: Boolean = false,
-    val settingsLoading: Boolean = true,
-    val centerLoading: Boolean = true,
-    val loadingMore: Boolean = false,
-    val saving: NotificationChannel? = null,
-    val settingsIssue: NotificationIssue? = null,
-    val centerIssue: NotificationIssue? = null,
-    val permissionBannerDismissed: Boolean = false,
-)
-
-internal sealed class NotificationEvent {
-    data class Refresh(val mode: NotificationMode) : NotificationEvent()
-    data class Change(val channel: NotificationChannel, val enabled: Boolean) : NotificationEvent()
-    data class Open(val entryId: String) : NotificationEvent()
-    data object More : NotificationEvent()
-    data object Back : NotificationEvent()
-    data object RequestPermission : NotificationEvent()
-    data class DismissPermission(val dismissed: Boolean) : NotificationEvent()
-}
-
-internal sealed class NotificationAction {
-    data class Open(val target: NotificationTarget) : NotificationAction()
-    data object Back : NotificationAction()
-    data object RequestPermission : NotificationAction()
-}
 
 internal class NotificationViewModel(
     private val scopeId: Long,
@@ -74,15 +43,15 @@ internal class NotificationViewModel(
             session.state.collect { if (!current()) clear() }
         }
         viewModelScope.launch {
-            connectivity.collect { online ->
+            connectivity.collect { isOnline ->
                 if (!current()) return@collect
-                val wasOnline = viewState.value.online
-                updateState { it.copy(online = online) }
-                if (!online) {
+                val wasOnline = viewState.value.isOnline
+                updateState { it.copy(isOnline = isOnline) }
+                if (!isOnline) {
                     locationDebounce?.cancel()
                     pendingLocation = null
                     updateState { it.copy(
-                        settingsLoading = false, centerLoading = false, loadingMore = false,
+                        isSettingsLoading = false, isCenterLoading = false, isLoadingMore = false,
                         settingsIssue = NotificationIssue.Offline, centerIssue = NotificationIssue.Offline,
                     ) }
                 } else if (!wasOnline) {
@@ -95,19 +64,39 @@ internal class NotificationViewModel(
 
     override fun handleEvent(event: NotificationEvent) {
         when (event) {
-            is NotificationEvent.Refresh -> when (event.mode) {
-                NotificationMode.Settings -> loadSettings()
-                NotificationMode.Center -> loadCenter()
-            }
-            is NotificationEvent.Change -> change(event.channel, event.enabled)
-            is NotificationEvent.Open -> open(event.entryId)
-            NotificationEvent.More -> viewState.value.nextCursor?.let(::loadCenter)
-            NotificationEvent.Back -> viewModelScope.launch { sendAction(NotificationAction.Back) }
-            NotificationEvent.RequestPermission -> viewModelScope.launch {
-                if (current()) sendAction(NotificationAction.RequestPermission)
-            }
-            is NotificationEvent.DismissPermission -> updateState { it.copy(permissionBannerDismissed = event.dismissed) }
+            is NotificationEvent.OnRefresh -> onRefresh(event)
+            is NotificationEvent.OnChange -> onChange(event.channel, event.enabled)
+            is NotificationEvent.OnOpen -> onOpen(event.entryId)
+            NotificationEvent.OnMore -> onMore()
+            NotificationEvent.OnBack -> onBack()
+            NotificationEvent.OnRequestPermission -> onRequestPermission()
+            is NotificationEvent.OnDismissPermission -> onDismissPermission(event)
         }
+    }
+
+    private fun onRefresh(event: NotificationEvent.OnRefresh) {
+        when (event.mode) {
+            NotificationMode.Settings -> loadSettings()
+            NotificationMode.Center -> loadCenter()
+        }
+    }
+
+    private fun onMore() {
+        viewState.value.nextCursor?.let(::loadCenter)
+    }
+
+    private fun onBack() {
+        viewModelScope.launch { sendAction(NotificationAction.Back) }
+    }
+
+    private fun onRequestPermission() {
+        viewModelScope.launch {
+            if (current()) sendAction(NotificationAction.RequestPermission)
+        }
+    }
+
+    private fun onDismissPermission(event: NotificationEvent.OnDismissPermission) {
+        updateState { it.copy(isPermissionBannerDismissed = event.dismissed) }
     }
 
     fun setCenterVisible(visible: Boolean) {
@@ -122,7 +111,7 @@ internal class NotificationViewModel(
     }
 
     private fun markRead(id: String) {
-        if (!current() || !viewState.value.online || viewState.value.items.any { it.id == id && it.readAt != null }) return
+        if (!current() || !viewState.value.isOnline || viewState.value.items.any { it.id == id && it.readAt != null }) return
         if (!reading.add(id)) return
         viewModelScope.launch {
             try {
@@ -170,7 +159,7 @@ internal class NotificationViewModel(
         }
     }
 
-    private fun canSendLocation() = current() && viewState.value.online &&
+    private fun canSendLocation() = current() && viewState.value.isOnline &&
         viewState.value.settings?.let { it.extraPushEnabled || it.extraInAppEnabled } == true
 
     private fun current() = session.state.value == SessionStatus.Active(scopeId)
@@ -188,11 +177,11 @@ internal class NotificationViewModel(
 
     private fun loadSettings() {
         if (!current() || settingsJob?.isActive == true) return
-        if (!viewState.value.online) {
-            updateState { it.copy(settingsLoading = false, settingsIssue = NotificationIssue.Offline) }
+        if (!viewState.value.isOnline) {
+            updateState { it.copy(isSettingsLoading = false, settingsIssue = NotificationIssue.Offline) }
             return
         }
-        updateState { it.copy(settingsLoading = true) }
+        updateState { it.copy(isSettingsLoading = true) }
         settingsJob = viewModelScope.launch { readSettings() }
     }
 
@@ -204,16 +193,16 @@ internal class NotificationViewModel(
             is AuthResult.Success -> {
                 applySettings(result.value)
                 updateState { state -> state.copy(
-                    settingsLoading = false,
+                    isSettingsLoading = false,
                     settingsIssue = when {
                         conflict -> NotificationIssue.Conflict
-                        !state.online -> NotificationIssue.Offline
+                        !state.isOnline -> NotificationIssue.Offline
                         else -> null
                     },
                 ) }
             }
             is AuthResult.Failure -> updateState { it.copy(
-                settingsLoading = false,
+                isSettingsLoading = false,
                 settingsIssue = if (conflict) NotificationIssue.Conflict else issue(result.error.code),
             ) }
         }
@@ -228,10 +217,10 @@ internal class NotificationViewModel(
         }
     }
 
-    private fun change(channel: NotificationChannel, enabled: Boolean) {
+    private fun onChange(channel: NotificationChannel, enabled: Boolean) {
         val state = viewState.value
         val old = state.settings ?: return
-        if (!current() || !state.online || settingsJob?.isActive == true) return
+        if (!current() || !state.isOnline || settingsJob?.isActive == true) return
         val proposed = when (channel) {
             NotificationChannel.RemindersPush -> old.copy(remindersPushEnabled = enabled)
             NotificationChannel.PersonalPush -> old.copy(personalPushEnabled = enabled)
@@ -263,8 +252,8 @@ internal class NotificationViewModel(
 
     private fun loadCenter(cursor: String? = null) {
         if (!current() || centerJob?.isActive == true) return
-        if (!viewState.value.online) {
-            updateState { it.copy(centerLoading = false, centerIssue = NotificationIssue.Offline) }
+        if (!viewState.value.isOnline) {
+            updateState { it.copy(isCenterLoading = false, centerIssue = NotificationIssue.Offline) }
             return
         }
         centerJob = viewModelScope.launch {
@@ -273,17 +262,17 @@ internal class NotificationViewModel(
                 centerInvalidated = false
                 readCenter(pageCursor)
                 pageCursor = null
-            } while (centerInvalidated && current() && centerVisible && viewState.value.online)
+            } while (centerInvalidated && current() && centerVisible && viewState.value.isOnline)
         }
     }
 
     private suspend fun readCenter(cursor: String?) {
-        updateState { it.copy(centerLoading = cursor == null, loadingMore = cursor != null, centerIssue = null) }
+        updateState { it.copy(isCenterLoading = cursor == null, isLoadingMore = cursor != null, centerIssue = null) }
         val result = session.readProtected(scopeId) { repository.list(cursor, it) }
         currentCoroutineContext().ensureActive()
         if (!current()) return
         updateState { state ->
-            val loaded = state.copy(centerLoading = false, loadingMore = false)
+            val loaded = state.copy(isCenterLoading = false, isLoadingMore = false)
             when (result) {
                 is AuthResult.Success -> {
                     val currentItems = state.items.associateBy(NotificationEntry::id)
@@ -295,7 +284,7 @@ internal class NotificationViewModel(
                         items = if (cursor == null) page.distinctBy(NotificationEntry::id) else
                             (state.items.map { olderPage[it.id] ?: it } + page).distinctBy(NotificationEntry::id),
                         nextCursor = result.value.nextCursor,
-                        centerIssue = NotificationIssue.Offline.takeUnless { state.online },
+                        centerIssue = NotificationIssue.Offline.takeUnless { state.isOnline },
                     )
                 }
                 is AuthResult.Failure -> if (cursor != null && result.error.code == AuthErrorCode.InvalidField) {
@@ -305,8 +294,8 @@ internal class NotificationViewModel(
         }
     }
 
-    private fun open(id: String) {
-        if (!current() || !viewState.value.online) return
+    private fun onOpen(id: String) {
+        if (!current() || !viewState.value.isOnline) return
         val entry = viewState.value.items.firstOrNull { it.id == id } ?: return
         markRead(id)
         val target = entry.target

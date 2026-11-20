@@ -12,6 +12,7 @@ import com.example.roy.domain.profile.ProfileAvatar
 import com.example.roy.domain.profile.ProfileProblem
 import com.example.roy.domain.profile.ProfileRepository
 import com.example.roy.domain.profile.ProfileResult
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,16 +29,37 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileViewModelTest {
     @Test
+    fun notificationNavigationEmitsActionsOnlyForCurrentSession() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val fixture = Fixture.create()
+            val actions = mutableListOf<ProfileViewAction>()
+            backgroundScope.launch { fixture.model.viewAction.collect { actions += it } }
+            fixture.model.handleEvent(ProfileViewEvent.OnNotificationsRequested)
+            fixture.model.handleEvent(ProfileViewEvent.OnNotificationSettingsRequested)
+            runCurrent()
+            assertEquals(listOf(ProfileViewAction.OpenNotifications, ProfileViewAction.OpenNotificationSettings), actions)
+            fixture.session.logout((fixture.session.state.value as SessionStatus.Active).scopeId)
+            fixture.model.handleEvent(ProfileViewEvent.OnNotificationsRequested)
+            fixture.model.handleEvent(ProfileViewEvent.OnNotificationSettingsRequested)
+            runCurrent()
+            assertEquals(2, actions.size)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun cancelledAvatarPickerDoesNotUploadAndKeepsCanonicalPhoto() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val fixture = Fixture.create()
-            fixture.model.handleEvent(ProfileViewEvent.Load)
+            fixture.model.handleEvent(ProfileViewEvent.OnLoad)
             runCurrent()
             val avatar = fixture.model.viewState.value.avatar
-            fixture.model.handleEvent(ProfileViewEvent.PickAvatarRequested)
+            fixture.model.handleEvent(ProfileViewEvent.OnPickAvatarRequested)
             assertTrue(fixture.model.viewState.value.isPickerPending)
-            fixture.model.handleEvent(ProfileViewEvent.AvatarPicked(PickImageResult.Cancelled))
+            fixture.model.handleEvent(ProfileViewEvent.OnAvatarPicked(PickImageResult.Cancelled))
             assertFalse(fixture.model.viewState.value.isPickerPending)
             assertEquals(avatar, fixture.model.viewState.value.avatar)
             assertEquals(0, fixture.repository.uploadCount)
@@ -52,12 +74,12 @@ class ProfileViewModelTest {
         try {
             val fixture = Fixture.create()
             val model = fixture.model
-            model.handleEvent(ProfileViewEvent.Load)
+            model.handleEvent(ProfileViewEvent.OnLoad)
             runCurrent()
-            model.handleEvent(ProfileViewEvent.DeleteAccountRequested)
-            model.handleEvent(ProfileViewEvent.DeletionPasswordChanged("fixture"))
-            model.handleEvent(ProfileViewEvent.DialogConfirmed)
-            model.handleEvent(ProfileViewEvent.DialogConfirmed)
+            model.handleEvent(ProfileViewEvent.OnDeleteAccountRequested)
+            model.handleEvent(ProfileViewEvent.OnDeletionPasswordChanged("fixture"))
+            model.handleEvent(ProfileViewEvent.OnDialogConfirmed)
+            model.handleEvent(ProfileViewEvent.OnDialogConfirmed)
             runCurrent()
             assertTrue(model.viewState.value.isDeletionUncertain)
             assertEquals("", model.viewState.value.deletionPassword)
@@ -65,20 +87,20 @@ class ProfileViewModelTest {
             runCurrent()
             fixture.online.value = true
             runCurrent()
-            model.handleEvent(ProfileViewEvent.DialogConfirmed)
+            model.handleEvent(ProfileViewEvent.OnDialogConfirmed)
             runCurrent()
             assertEquals(1, fixture.repository.deletionCount)
-            model.handleEvent(ProfileViewEvent.CheckDeletion)
+            model.handleEvent(ProfileViewEvent.OnCheckDeletion)
             runCurrent()
             assertEquals(2, fixture.repository.profileReads)
             assertEquals(1, fixture.repository.deletionCount)
             assertTrue(model.viewState.value.isDeletionUncertain)
             assertFalse(model.viewState.value.canSubmit)
             assertEquals(ProfileNotice.DeletionCheckAvailable, model.viewState.value.notice)
-            model.handleEvent(ProfileViewEvent.DialogDismissed)
-            model.handleEvent(ProfileViewEvent.LogoutRequested)
+            model.handleEvent(ProfileViewEvent.OnDialogDismissed)
+            model.handleEvent(ProfileViewEvent.OnLogoutRequested)
             assertEquals(ProfileDialog.Logout, model.viewState.value.dialog)
-            model.handleEvent(ProfileViewEvent.DialogConfirmed)
+            model.handleEvent(ProfileViewEvent.OnDialogConfirmed)
             runCurrent()
             assertEquals(SessionStatus.Guest, fixture.session.state.value)
             assertEquals(1, fixture.repository.deletionCount)
@@ -92,10 +114,10 @@ class ProfileViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val fixture = Fixture.create()
-            fixture.model.handleEvent(ProfileViewEvent.Load)
+            fixture.model.handleEvent(ProfileViewEvent.OnLoad)
             runCurrent()
-            fixture.model.handleEvent(ProfileViewEvent.NameChanged("Новое имя"))
-            fixture.model.handleEvent(ProfileViewEvent.SaveName)
+            fixture.model.handleEvent(ProfileViewEvent.OnNameChanged("Новое имя"))
+            fixture.model.handleEvent(ProfileViewEvent.OnSaveName)
             runCurrent()
             val restarted = SessionCoordinator(SessionTestRepository(), fixture.store, allowOfflineRestore = true)
             restarted.setOnline(false)
@@ -103,7 +125,7 @@ class ProfileViewModelTest {
             val scope = (restarted.state.value as SessionStatus.Active).scopeId
             val offline = ProfileViewModel(scope, restarted, fixture.repository, MutableStateFlow(false))
             runCurrent()
-            offline.handleEvent(ProfileViewEvent.Load)
+            offline.handleEvent(ProfileViewEvent.OnLoad)
             runCurrent()
             assertEquals("Новое имя", offline.viewState.value.user?.displayName)
             assertTrue(offline.viewState.value.isCached)
@@ -119,7 +141,7 @@ class ProfileViewModelTest {
         try {
             val fixture = Fixture.create()
             val model = fixture.model
-            model.handleEvent(ProfileViewEvent.Load)
+            model.handleEvent(ProfileViewEvent.OnLoad)
             runCurrent()
             assertTrue(model.viewState.value.canSubmit)
             fixture.online.value = false
@@ -132,7 +154,7 @@ class ProfileViewModelTest {
             assertEquals(ProfileProblem.Unavailable, model.viewState.value.error)
             assertFalse(model.viewState.value.canSubmit)
             fixture.repository.isUnavailable = false
-            model.handleEvent(ProfileViewEvent.Load)
+            model.handleEvent(ProfileViewEvent.OnLoad)
             runCurrent()
             assertEquals(3, fixture.repository.profileReads)
             assertTrue(model.viewState.value.canSubmit)

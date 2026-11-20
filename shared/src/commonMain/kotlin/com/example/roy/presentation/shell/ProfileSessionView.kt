@@ -16,7 +16,11 @@ import com.example.roy.domain.auth.AuthErrorCode
 import com.example.roy.presentation.components.DestructiveButton
 import com.example.roy.presentation.theme.RoyTheme
 import org.jetbrains.compose.resources.stringResource
-import roy.shared.generated.resources.*
+import roy.shared.generated.resources.Res
+import roy.shared.generated.resources.auth_logout
+import roy.shared.generated.resources.auth_logout_failed
+import roy.shared.generated.resources.auth_network
+import roy.shared.generated.resources.tab_profile
 
 @Composable
 internal fun ProfileSessionView(
@@ -39,7 +43,7 @@ internal fun ProfileSessionView(
             label = stringResource(Res.string.auth_logout),
             isEnabled = !status.isLoggingOut,
             isSubmitting = status.isLoggingOut,
-            onClick = { eventHandler(RoyRootViewEvent.Logout) },
+            onClick = { eventHandler(RoyRootViewEvent.OnLogout) },
         )
         status.logoutError?.let { error ->
             BasicText(

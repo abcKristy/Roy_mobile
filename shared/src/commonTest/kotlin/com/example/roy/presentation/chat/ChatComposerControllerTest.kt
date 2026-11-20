@@ -176,6 +176,7 @@ class ChatComposerControllerTest {
     }
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 private suspend fun TestScope.composerFixture(): ComposerFixture {
     val auth = SessionTestRepository()
     val sessions = SessionCoordinator(auth, SessionTestStore())

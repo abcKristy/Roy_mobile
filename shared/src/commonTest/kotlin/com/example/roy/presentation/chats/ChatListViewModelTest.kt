@@ -57,18 +57,18 @@ class ChatListViewModelTest {
                 OfflineRecord({ snapshot }, { snapshot = it }, { snapshot = null }),
             )
             val model = ChatListViewModel(scope, ChatListOperations(session, repository), cache, session)
-            model.handleEvent(ChatListViewEvent.Refresh)
+            model.handleEvent(ChatListViewEvent.OnRefresh)
             runCurrent()
             assertEquals("next", model.viewState.value.nextCursor)
 
-            model.handleEvent(ChatListViewEvent.LoadMore)
+            model.handleEvent(ChatListViewEvent.OnLoadMore)
             runCurrent()
             assertEquals(listOf(row), model.viewState.value.rows)
             assertNotNull(model.viewState.value.cachedFetchedAt)
             assertEquals(AuthErrorCode.Network, model.viewState.value.error)
             assertNull(model.viewState.value.nextCursor)
 
-            model.handleEvent(ChatListViewEvent.Retry)
+            model.handleEvent(ChatListViewEvent.OnRetry)
             runCurrent()
             assertEquals(listOf(null, "next", null), requests)
             assertNull(model.viewState.value.cachedFetchedAt)

@@ -33,18 +33,18 @@ internal class AndroidSecureRecord(context: Context, filename: String, private v
             return@withContext null
         }
         if (encrypted.contentEquals(ClearedRecord)) return@withContext null
-        check(encrypted.size > IvSize)
+        check(encrypted.size > IV_SIZE)
         val key = checkNotNull(keyStore.getKey(alias, null) as? SecretKey)
-        val cipher = Cipher.getInstance(Transformation)
-        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TagBits, encrypted, 0, IvSize))
-        cipher.doFinal(encrypted, IvSize, encrypted.size - IvSize).decodeToString(throwOnInvalidSequence = true)
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, encrypted, 0, IV_SIZE))
+        cipher.doFinal(encrypted, IV_SIZE, encrypted.size - IV_SIZE).decodeToString(throwOnInvalidSequence = true)
     }
 
     suspend fun replace(record: String): Unit = withContext(Dispatchers.IO) {
         val key = keyStore.getKey(alias, null) as? SecretKey ?: generateKey()
-        val cipher = Cipher.getInstance(Transformation)
+        val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key)
-        check(cipher.iv.size == IvSize)
+        check(cipher.iv.size == IV_SIZE)
         val encrypted = cipher.iv + cipher.doFinal(record.encodeToByteArray())
         val stream = file.startWrite()
         try {
@@ -86,9 +86,9 @@ internal class AndroidSecureRecord(context: Context, filename: String, private v
         .generateKey()
 
     private companion object {
-        const val Transformation = "AES/GCM/NoPadding"
-        const val IvSize = 12
-        const val TagBits = 128
+        const val TRANSFORMATION = "AES/GCM/NoPadding"
+        const val IV_SIZE = 12
+        const val TAG_BITS = 128
         val ClearedRecord = byteArrayOf(0)
     }
 }

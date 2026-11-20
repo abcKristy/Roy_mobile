@@ -5,7 +5,7 @@ import com.example.roy.data.auth.AuthHttpRequest
 import com.example.roy.data.auth.AuthHttpResponse
 import com.example.roy.data.auth.AuthHttpTransport
 import com.example.roy.domain.auth.AuthResult
-import com.example.roy.domain.profile.MaxProfileAvatarBytes
+import com.example.roy.domain.profile.MAX_PROFILE_AVATAR_BYTES
 import com.example.roy.domain.profile.PickImageResult
 import com.example.roy.domain.profile.ProfileAvatar
 import com.example.roy.domain.profile.ProfileProblem
@@ -21,12 +21,12 @@ class ProfileRemoteDataSourceTest {
     @Test
     fun nameWritesOnlyDisplayNameAndUsesCanonicalResponse() = runTest {
         val transport = RecordingTransport(AuthHttpResponse(200, """
-            {"id":"$userId","displayName":"Каноническое имя","phone":"+447700900200","ageYears":25,"createdAt":"2026-11-16T00:00:00Z"}
+            {"id":"$USER_ID","displayName":"Каноническое имя","phone":"+447700900200","ageYears":25,"createdAt":"2026-11-16T00:00:00Z"}
         """.trimIndent()))
-        val result = ProfileRemoteDataSource(origin, transport).updateName("Имя", "access")
+        val result = ProfileRemoteDataSource(ORIGIN, transport).updateName("Имя", "access")
         val request = transport.requests.single()
         assertEquals(AuthHttpMethod.Patch, request.method)
-        assertEquals("$origin/api/v1/me", request.url)
+        assertEquals("$ORIGIN/api/v1/me", request.url)
         assertEquals("{\"displayName\":\"Имя\"}", request.body)
         val user = assertIs<ProfileResult.Value<com.example.roy.domain.auth.AuthUser>>(assertIs<AuthResult.Success<*>>(result).value).value
         assertEquals("Каноническое имя", user.displayName)
@@ -36,7 +36,7 @@ class ProfileRemoteDataSourceTest {
     @Test
     fun multipartUploadUsesOneBinaryFilePartAndRejectsOversizedInputBeforeNetwork() = runTest {
         val transport = RecordingTransport(AuthHttpResponse(413, ""))
-        val profile = ProfileRemoteDataSource(origin, transport)
+        val profile = ProfileRemoteDataSource(ORIGIN, transport)
         val image = PickImageResult.Selected(byteArrayOf(-1, -40, -1, 0), "image/jpeg")
         assertEquals(AuthResult.Success(ProfileResult.Rejected(ProfileProblem.TooLarge)), profile.uploadAvatar(image, "access"))
         val request = transport.requests.single()
@@ -47,7 +47,7 @@ class ProfileRemoteDataSourceTest {
         assertTrue(text.startsWith("--$boundary\r\nContent-Disposition: form-data; name=\"file\";"))
         assertTrue(text.endsWith("\r\n--$boundary--\r\n"))
         assertTrue(bytes.toList().windowed(image.bytes.size).any { it == image.bytes.toList() })
-        val huge = PickImageResult.Selected(ByteArray(MaxProfileAvatarBytes + 1), "image/png")
+        val huge = PickImageResult.Selected(ByteArray(MAX_PROFILE_AVATAR_BYTES + 1), "image/png")
         assertEquals(AuthResult.Success(ProfileResult.Rejected(ProfileProblem.TooLarge)), profile.uploadAvatar(huge, "access"))
         assertEquals(1, transport.requests.size)
     }
@@ -55,8 +55,8 @@ class ProfileRemoteDataSourceTest {
     @Test
     fun conditionalAvatarReadAndAmbiguousDeletionHaveDistinctTypedResults() = runTest {
         val transport = RecordingTransport(AuthHttpResponse(304, ""))
-        val profile = ProfileRemoteDataSource(origin, transport)
-        assertEquals(AuthResult.Success(ProfileResult.Value(ProfileAvatar.Unchanged)), profile.readAvatar(userId, "\"v1\"", "access"))
+        val profile = ProfileRemoteDataSource(ORIGIN, transport)
+        assertEquals(AuthResult.Success(ProfileResult.Value(ProfileAvatar.Unchanged)), profile.readAvatar(USER_ID, "\"v1\"", "access"))
         assertEquals("\"v1\"", transport.requests.single().headers["If-None-Match"])
         transport.response = null
         assertEquals(
@@ -76,7 +76,7 @@ class ProfileRemoteDataSourceTest {
     }
 
     private companion object {
-        const val origin = "http://127.0.0.1:8083"
-        const val userId = "75ebc250-29ba-4495-abea-e662559afecc"
+        const val ORIGIN = "http://127.0.0.1:8083"
+        const val USER_ID = "75ebc250-29ba-4495-abea-e662559afecc"
     }
 }

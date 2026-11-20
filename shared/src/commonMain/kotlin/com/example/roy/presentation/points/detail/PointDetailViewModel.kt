@@ -8,7 +8,7 @@ import com.example.roy.domain.map.PointError
 import com.example.roy.domain.map.PointResult
 import com.example.roy.domain.map.PointTopic
 import com.example.roy.domain.points.DetailReply
-import com.example.roy.domain.points.OtherTopicKey
+import com.example.roy.domain.points.OTHER_TOPIC_KEY
 import com.example.roy.domain.points.PointDetailGateway
 import com.example.roy.domain.points.PointTopicInput
 import com.example.roy.domain.points.findTopic
@@ -41,18 +41,62 @@ internal class PointDetailViewModel(
     override fun handleEvent(event: PointDetailEvent) {
         when (event) {
             PointDetailEvent.OnBack -> onBack()
-            PointDetailEvent.OnRetry -> load()
-            is PointDetailEvent.OnTopicSelected -> selectTopic(event.topicId)
-            PointDetailEvent.OnJoinRequested -> requestJoin()
-            PointDetailEvent.OnAddRequested -> requestAdd()
-            PointDetailEvent.OnPresetsRetry -> loadPresets()
-            is PointDetailEvent.OnPresetSelected -> selectPreset(event.presetKey)
-            is PointDetailEvent.OnCustomLabelChanged -> changeLabel(event.label)
-            PointDetailEvent.OnAddConfirmed -> confirmAdd()
-            PointDetailEvent.OnLeaveRequested -> requestLeave()
-            PointDetailEvent.OnLeaveConfirmed -> confirmLeave()
-            PointDetailEvent.OnDialogDismissed -> dismissDialog()
+            PointDetailEvent.OnRetry -> onRetry()
+            is PointDetailEvent.OnTopicSelected -> onTopicSelected(event)
+            PointDetailEvent.OnJoinRequested -> onJoinRequested()
+            PointDetailEvent.OnAddRequested -> onAddRequested()
+            PointDetailEvent.OnPresetsRetry -> onPresetsRetry()
+            is PointDetailEvent.OnPresetSelected -> onPresetSelected(event)
+            is PointDetailEvent.OnCustomLabelChanged -> onCustomLabelChanged(event)
+            PointDetailEvent.OnAddConfirmed -> onAddConfirmed()
+            PointDetailEvent.OnLeaveRequested -> onLeaveRequested()
+            PointDetailEvent.OnLeaveConfirmed -> onLeaveConfirmed()
+            PointDetailEvent.OnDialogDismissed -> onDialogDismissed()
         }
+    }
+
+    private fun onRetry() {
+        load()
+    }
+
+    private fun onTopicSelected(event: PointDetailEvent.OnTopicSelected) {
+        selectTopic(event.topicId)
+    }
+
+    private fun onJoinRequested() {
+        requestJoin()
+    }
+
+    private fun onAddRequested() {
+        requestAdd()
+    }
+
+    private fun onPresetsRetry() {
+        loadPresets()
+    }
+
+    private fun onPresetSelected(event: PointDetailEvent.OnPresetSelected) {
+        selectPreset(event.presetKey)
+    }
+
+    private fun onCustomLabelChanged(event: PointDetailEvent.OnCustomLabelChanged) {
+        changeLabel(event.label)
+    }
+
+    private fun onAddConfirmed() {
+        confirmAdd()
+    }
+
+    private fun onLeaveRequested() {
+        requestLeave()
+    }
+
+    private fun onLeaveConfirmed() {
+        confirmLeave()
+    }
+
+    private fun onDialogDismissed() {
+        dismissDialog()
     }
 
     private fun onBack() {
@@ -194,7 +238,7 @@ internal class PointDetailViewModel(
         val scope = scopeId ?: return
         val key = state.presetKey ?: return
         if (!state.isAddSheetOpen || state.isBusy) return
-        val customLabel = state.customLabel.trim().takeIf { key == OtherTopicKey }
+        val customLabel = state.customLabel.trim().takeIf { key == OTHER_TOPIC_KEY }
         if (customLabel != null && !validCustomTopicLabel(customLabel)) {
             updateState { it.copy(sheetError = PointDetailError.InvalidTopic) }
             return

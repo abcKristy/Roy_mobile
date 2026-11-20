@@ -63,7 +63,7 @@ internal fun ChatReportView(
     val type = RoyTheme.typography
     val dimensions = RoyTheme.dimensions
     Dialog(
-        onDismissRequest = { eventHandler(ChatReportEvent.Close) },
+        onDismissRequest = { eventHandler(ChatReportEvent.OnClose) },
         properties = DialogProperties(dismissOnBackPress = !viewState.isSubmitting, dismissOnClickOutside = false),
     ) {
         Column(
@@ -81,7 +81,7 @@ internal fun ChatReportView(
                 RoyTextField(
                     value = viewState.reason,
                     label = stringResource(Res.string.chat_report_reason),
-                    onValueChange = { eventHandler(ChatReportEvent.Edit(it)) },
+                    onValueChange = { eventHandler(ChatReportEvent.OnEdit(it)) },
                     isEnabled = !viewState.isSubmitting,
                     errorText = if (viewState.reason.isNotBlank() && !viewState.isSubmitting && !viewState.isReasonValid)
                         stringResource(Res.string.chat_report_invalid) else null,
@@ -108,7 +108,7 @@ internal fun ChatReportView(
                 }
                 PrimaryButton(
                     text = stringResource(Res.string.chat_report_submit),
-                    onClick = { eventHandler(ChatReportEvent.Submit) },
+                    onClick = { eventHandler(ChatReportEvent.OnSubmit) },
                     modifier = Modifier.fillMaxWidth(),
                     isEnabled = viewState.canSubmit,
                     isSubmitting = viewState.isSubmitting,
@@ -116,7 +116,7 @@ internal fun ChatReportView(
             }
             SecondaryButton(
                 text = stringResource(if (viewState.isFinal) Res.string.chat_report_close else Res.string.chat_report_cancel),
-                onClick = { eventHandler(ChatReportEvent.Close) },
+                onClick = { eventHandler(ChatReportEvent.OnClose) },
                 modifier = Modifier.fillMaxWidth(),
                 isEnabled = !viewState.isSubmitting,
             )

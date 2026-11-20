@@ -40,12 +40,22 @@ import kotlinx.coroutines.test.setMain
 @OptIn(ExperimentalCoroutinesApi::class)
 class MapViewModelTest {
     @Test
+    fun attributionRequestEmitsScreenAction() = mapTest {
+        val model = model(ControlledPoints())
+        val actions = mutableListOf<MapViewAction>()
+        backgroundScope.launch { model.viewAction.collect { actions += it } }
+        model.handleEvent(MapViewEvent.OnAttributionRequested("https://www.openstreetmap.org/copyright"))
+        runCurrent()
+        assertEquals(listOf<MapViewAction>(MapViewAction.OpenAttribution("https://www.openstreetmap.org/copyright")), actions)
+    }
+
+    @Test
     fun viewportIgnoresLateSuccessFromCancelledSource() = mapTest {
         val source = ControlledPoints()
         val model = model(source)
-        model.handleEvent(MapViewEvent.ViewportChanged(boundsA))
+        model.handleEvent(MapViewEvent.OnViewportChanged(boundsA))
         runCurrent()
-        model.handleEvent(MapViewEvent.ViewportChanged(boundsB))
+        model.handleEvent(MapViewEvent.OnViewportChanged(boundsB))
         runCurrent()
 
         source.page(boundsB).reply.resume(page(pointB))
@@ -62,13 +72,13 @@ class MapViewModelTest {
     fun failedNewFilterDoesNotShowOldPinsAndRetryUsesCurrentFilter() = mapTest {
         val source = ControlledPoints()
         val model = model(source)
-        model.handleEvent(MapViewEvent.ViewportChanged(boundsA))
+        model.handleEvent(MapViewEvent.OnViewportChanged(boundsA))
         runCurrent()
         source.page(boundsA).reply.resume(page(pointA))
         runCurrent()
 
         val filter = PointFilter(topicKey = "football")
-        model.handleEvent(MapViewEvent.FilterChanged(filter))
+        model.handleEvent(MapViewEvent.OnFilterChanged(filter))
         runCurrent()
         val first = source.pages.last()
         first.reply.resume(page(pointB, "second"))
@@ -82,7 +92,7 @@ class MapViewModelTest {
         assertTrue(model.viewState.value.points.isEmpty())
         assertEquals(filter, model.viewState.value.appliedFilter)
         assertEquals(ViewportContent.Failed(PointError.Network), model.viewState.value.viewport)
-        model.handleEvent(MapViewEvent.RetryViewport)
+        model.handleEvent(MapViewEvent.OnRetryViewport)
         runCurrent()
         val retry = source.pages.last()
         assertEquals(ViewportQuery(boundsA, filter), retry.query)
@@ -104,9 +114,9 @@ class MapViewModelTest {
             val actions = mutableListOf<MapViewAction>()
             val collector = backgroundScope.launch { model.viewAction.collect { actions += it } }
 
-            model.handleEvent(MapViewEvent.PinSelected(pointA.id))
+            model.handleEvent(MapViewEvent.OnPinSelected(pointA.id))
             runCurrent()
-            model.handleEvent(MapViewEvent.PinSelected(pointB.id))
+            model.handleEvent(MapViewEvent.OnPinSelected(pointB.id))
             runCurrent()
             source.detail(pointB.id).resume(PointResult.Success(pointB))
             runCurrent()
@@ -126,20 +136,20 @@ class MapViewModelTest {
         val model = model(source)
         val actions = mutableListOf<MapViewAction>()
         backgroundScope.launch { model.viewAction.collect { actions += it } }
-        model.handleEvent(MapViewEvent.ViewportChanged(boundsA))
+        model.handleEvent(MapViewEvent.OnViewportChanged(boundsA))
         runCurrent()
         source.page(boundsA).reply.resume(page(pointA))
         runCurrent()
-        model.handleEvent(MapViewEvent.PinSelected(pointA.id))
+        model.handleEvent(MapViewEvent.OnPinSelected(pointA.id))
         runCurrent()
         val closed = source.detail(pointA.id)
-        model.handleEvent(MapViewEvent.PreviewClosed)
+        model.handleEvent(MapViewEvent.OnPreviewClosed)
         closed.resume(PointResult.Success(pointA))
         runCurrent()
         assertNull(model.viewState.value.selectedPointId)
         assertNull(model.viewState.value.preview)
 
-        model.handleEvent(MapViewEvent.PinSelected(pointA.id))
+        model.handleEvent(MapViewEvent.OnPinSelected(pointA.id))
         runCurrent()
         source.detail(pointA.id).resume(PointResult.Failure(PointError.ResourceGone))
         runCurrent()
@@ -156,19 +166,19 @@ class MapViewModelTest {
         val actions = mutableListOf<MapViewAction>()
         val collector = backgroundScope.launch { model.viewAction.collect { actions += it } }
 
-        model.handleEvent(MapViewEvent.PinSelected(pointA.id))
+        model.handleEvent(MapViewEvent.OnPinSelected(pointA.id))
         runCurrent()
         source.detail(pointA.id).resume(PointResult.Success(pointA))
         runCurrent()
-        model.handleEvent(MapViewEvent.PinSelected(pointB.id))
-        model.handleEvent(MapViewEvent.DetailsRequested)
+        model.handleEvent(MapViewEvent.OnPinSelected(pointB.id))
+        model.handleEvent(MapViewEvent.OnDetailsRequested)
         runCurrent()
         assertTrue(actions.isEmpty())
         source.detail(pointB.id).resume(PointResult.Success(pointB))
         runCurrent()
 
-        model.handleEvent(MapViewEvent.DetailsRequested)
-        model.handleEvent(MapViewEvent.DetailsRequested)
+        model.handleEvent(MapViewEvent.OnDetailsRequested)
+        model.handleEvent(MapViewEvent.OnDetailsRequested)
         runCurrent()
         collector.cancel()
         runCurrent()
@@ -195,7 +205,7 @@ class MapViewModelTest {
         val actions = mutableListOf<MapViewAction>()
         backgroundScope.launch { model.viewAction.collect { actions += it } }
         runCurrent()
-        model.handleEvent(MapViewEvent.PinSelected(pointA.id))
+        model.handleEvent(MapViewEvent.OnPinSelected(pointA.id))
         assertEquals(PointPreview.Ready(pointA), model.viewState.value.preview)
 
         connectivity.value = true
@@ -204,7 +214,7 @@ class MapViewModelTest {
         runCurrent()
         assertFalse(model.viewState.value.isUsingCache)
         assertEquals(PointPreview.Loading, model.viewState.value.preview)
-        model.handleEvent(MapViewEvent.DetailsRequested)
+        model.handleEvent(MapViewEvent.OnDetailsRequested)
         runCurrent()
         assertTrue(actions.isEmpty())
 
@@ -226,8 +236,8 @@ class MapViewModelTest {
             result.await()
         }
         val model = model(ControlledPoints(), location)
-        model.handleEvent(MapViewEvent.LocateRequested)
-        model.handleEvent(MapViewEvent.LocateRequested)
+        model.handleEvent(MapViewEvent.OnLocateRequested)
+        model.handleEvent(MapViewEvent.OnLocateRequested)
         runCurrent()
         assertTrue(model.viewState.value.isLocating)
         assertEquals(1, locationCalls)
@@ -237,8 +247,8 @@ class MapViewModelTest {
         val command = assertNotNull(model.viewState.value.cameraCommand)
         assertEquals(pointA.position, model.viewState.value.devicePosition)
         assertFalse(model.viewState.value.isLocating)
-        model.handleEvent(MapViewEvent.CameraApplied(command.requestId))
-        model.handleEvent(MapViewEvent.CameraApplied(command.requestId))
+        model.handleEvent(MapViewEvent.OnCameraApplied(command.requestId))
+        model.handleEvent(MapViewEvent.OnCameraApplied(command.requestId))
         assertNull(model.viewState.value.cameraCommand)
         assertEquals(command.camera, model.viewState.value.camera)
     }
@@ -249,19 +259,19 @@ class MapViewModelTest {
         val actions = mutableListOf<MapViewAction>()
         backgroundScope.launch { model.viewAction.collect { actions += it } }
 
-        model.handleEvent(MapViewEvent.CreateRequested)
-        model.handleEvent(MapViewEvent.CreateRequested)
+        model.handleEvent(MapViewEvent.OnCreateRequested)
+        model.handleEvent(MapViewEvent.OnCreateRequested)
         runCurrent()
         assertEquals(listOf<MapViewAction>(MapViewAction.OpenCreate(MoscowCamera.center)), actions)
 
-        model.handleEvent(MapViewEvent.ScreenLeft)
-        model.handleEvent(MapViewEvent.ScreenResumed)
-        model.handleEvent(MapViewEvent.CreateRequested)
+        model.handleEvent(MapViewEvent.OnScreenLeft)
+        model.handleEvent(MapViewEvent.OnScreenResumed)
+        model.handleEvent(MapViewEvent.OnCreateRequested)
         runCurrent()
         assertEquals(List<MapViewAction>(2) { MapViewAction.OpenCreate(MoscowCamera.center) }, actions)
 
-        model.handleEvent(MapViewEvent.CreateNavigationDeclined)
-        model.handleEvent(MapViewEvent.CreateRequested)
+        model.handleEvent(MapViewEvent.OnCreateNavigationDeclined)
+        model.handleEvent(MapViewEvent.OnCreateRequested)
         runCurrent()
         assertEquals(List<MapViewAction>(3) { MapViewAction.OpenCreate(MoscowCamera.center) }, actions)
     }
@@ -278,13 +288,13 @@ class MapViewModelTest {
             }
         }
         val model = model(ControlledPoints(), location)
-        model.handleEvent(MapViewEvent.LocateRequested)
+        model.handleEvent(MapViewEvent.OnLocateRequested)
         runCurrent()
         val command = assertNotNull(model.viewState.value.cameraCommand)
-        model.handleEvent(MapViewEvent.CameraApplied(command.requestId))
+        model.handleEvent(MapViewEvent.OnCameraApplied(command.requestId))
 
         accessProblem = DeviceLocationResult.Disabled
-        model.handleEvent(MapViewEvent.ScreenResumed)
+        model.handleEvent(MapViewEvent.OnScreenResumed)
         assertNull(model.viewState.value.devicePosition)
         assertEquals(DeviceLocationResult.Disabled, model.viewState.value.locationProblem)
         assertEquals(command.camera, model.viewState.value.camera)

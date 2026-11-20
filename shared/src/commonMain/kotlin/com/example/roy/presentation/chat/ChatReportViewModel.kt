@@ -20,30 +20,6 @@ internal data class ChatReportTarget(val userId: String, val displayName: String
 
 internal enum class ChatReportFeedback { Submitted, Duplicate, Forbidden, InvalidReason, Retry, Failed }
 
-internal data class ChatReportState(
-    val reason: String = "",
-    val isSubmitting: Boolean = false,
-    val feedback: ChatReportFeedback? = null,
-    val isOnline: Boolean = true,
-) {
-    val isFinal: Boolean
-        get() = feedback == ChatReportFeedback.Submitted || feedback == ChatReportFeedback.Duplicate ||
-            feedback == ChatReportFeedback.Forbidden
-
-    val isReasonValid: Boolean get() = isReportReasonValid(reason)
-    val canSubmit: Boolean get() = isOnline && !isSubmitting && !isFinal && isReasonValid
-}
-
-internal sealed class ChatReportEvent {
-    data class Edit(val reason: String) : ChatReportEvent()
-    data object Submit : ChatReportEvent()
-    data object Close : ChatReportEvent()
-}
-
-internal sealed class ChatReportAction {
-    data object Close : ChatReportAction()
-}
-
 internal class ChatReportViewModel(
     private val target: ChatReportTarget,
     private val chatId: String,
@@ -67,23 +43,27 @@ internal class ChatReportViewModel(
 
     override fun handleEvent(event: ChatReportEvent) {
         when (event) {
-            is ChatReportEvent.Edit -> edit(event.reason)
-            ChatReportEvent.Submit -> submit()
-            ChatReportEvent.Close -> if (!viewState.value.isSubmitting) {
-                discard()
-                viewModelScope.launch { sendAction(ChatReportAction.Close) }
-            }
+            is ChatReportEvent.OnEdit -> onEdit(event.reason)
+            ChatReportEvent.OnSubmit -> onSubmit()
+            ChatReportEvent.OnClose -> onClose()
         }
     }
 
-    private fun edit(reason: String) {
+    private fun onClose() {
+        if (!viewState.value.isSubmitting) {
+            discard()
+            viewModelScope.launch { sendAction(ChatReportAction.Close) }
+        }
+    }
+
+    private fun onEdit(reason: String) {
         val state = viewState.value
         if (state.isSubmitting || state.isFinal || reason == state.reason) return
         if (operation?.reason != reason.trim()) operation = null
         updateState { it.copy(reason = reason, feedback = null) }
     }
 
-    private fun submit() {
+    private fun onSubmit() {
         val state = viewState.value
         if (!state.canSubmit) return
         val command = operation ?: ReportOperation(state.reason.trim(), Uuid.random().toString())
@@ -116,7 +96,7 @@ internal class ChatReportViewModel(
     private data class ReportOperation(val reason: String, val key: String)
 }
 
-private fun isReportReasonValid(value: String): Boolean {
+internal fun isReportReasonValid(value: String): Boolean {
     val trimmed = value.trim()
     if (trimmed.isEmpty() || '\u0000' in trimmed || trimmed.length > 2000) return false
     var codePoints = 0

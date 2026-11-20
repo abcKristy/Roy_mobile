@@ -23,10 +23,6 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
-internal sealed class MeetingViewAction {
-    data object RefreshChatHistory : MeetingViewAction()
-}
-
 internal class MeetingViewModel(
     private val scopeId: Long,
     private val chatId: String,
@@ -74,43 +70,117 @@ internal class MeetingViewModel(
 
     override fun handleEvent(event: MeetingViewEvent) {
         when (event) {
-            is MeetingViewEvent.OnAccessChanged -> changeAccess(event)
-            MeetingViewEvent.OnRefresh -> {
-                if (viewState.value.isOnline) {
-                    updateState { it.copy(issue = null) }
-                    refresh()
-                }
-            }
-            MeetingViewEvent.OnMeetingsRequested -> if (authorized() && !pending()) {
-                open(MeetingSheet.List)
-                if (viewState.value.isOnline) refresh() else showIssue(MeetingIssue.Offline)
-            }
-            MeetingViewEvent.OnDismiss -> dismiss()
-            MeetingViewEvent.OnCreateRequested -> openCreate()
-            is MeetingViewEvent.OnDateChanged -> editDraft { copy(date = event.date, dateIssue = null) }
-            is MeetingViewEvent.OnTimeChanged -> editDraft { copy(time = event.time, timeIssue = null) }
-            is MeetingViewEvent.OnDurationChanged -> editDraft { copy(durationMinutes = event.minutes, durationIssue = null) }
-            is MeetingViewEvent.OnCustomDurationChanged -> editDraft { copy(customMinutes = event.minutes, durationIssue = null) }
-            MeetingViewEvent.OnCreateConfirmed -> create()
-            MeetingViewEvent.OnProposalsLoadMore -> loadMoreProposals()
-            MeetingViewEvent.OnVotersLoadMore -> loadVoters(append = true)
-            MeetingViewEvent.OnVotersRetry -> loadVoters()
-            is MeetingViewEvent.OnProposalSelected -> select(event.proposalId)
-            is MeetingViewEvent.OnVote -> vote(event.proposalId, event.going)
-            is MeetingViewEvent.OnVotersRequested -> if (authorized() && event.proposalId in snapshots) {
-                open(MeetingSheet.Voters(event.proposalId))
-                loadVoters()
-            }
-            is MeetingViewEvent.OnBookRequested -> if (checkAction(event.proposalId) { bookableIds }) {
-                open(MeetingSheet.Booking(event.proposalId))
-            }
-            MeetingViewEvent.OnBookConfirmed -> book(confirmOverlap = false)
-            MeetingViewEvent.OnOverlapConfirmed -> book(confirmOverlap = true)
-            is MeetingViewEvent.OnCloseRequested -> if (checkAction(event.proposalId) { closableIds }) {
-                open(MeetingSheet.Close(event.proposalId))
-            }
-            MeetingViewEvent.OnCloseConfirmed -> close()
+            is MeetingViewEvent.OnAccessChanged -> onAccessChanged(event)
+            MeetingViewEvent.OnRefresh -> onRefresh()
+            MeetingViewEvent.OnMeetingsRequested -> onMeetingsRequested()
+            MeetingViewEvent.OnDismiss -> onDismiss()
+            MeetingViewEvent.OnCreateRequested -> onCreateRequested()
+            is MeetingViewEvent.OnDateChanged -> onDateChanged(event)
+            is MeetingViewEvent.OnTimeChanged -> onTimeChanged(event)
+            is MeetingViewEvent.OnDurationChanged -> onDurationChanged(event)
+            is MeetingViewEvent.OnCustomDurationChanged -> onCustomDurationChanged(event)
+            MeetingViewEvent.OnCreateConfirmed -> onCreateConfirmed()
+            MeetingViewEvent.OnProposalsLoadMore -> onProposalsLoadMore()
+            MeetingViewEvent.OnVotersLoadMore -> onVotersLoadMore()
+            MeetingViewEvent.OnVotersRetry -> onVotersRetry()
+            is MeetingViewEvent.OnProposalSelected -> onProposalSelected(event)
+            is MeetingViewEvent.OnVote -> onVote(event.proposalId, event.going)
+            is MeetingViewEvent.OnVotersRequested -> onVotersRequested(event)
+            is MeetingViewEvent.OnBookRequested -> onBookRequested(event)
+            MeetingViewEvent.OnBookConfirmed -> onBookConfirmed()
+            MeetingViewEvent.OnOverlapConfirmed -> onOverlapConfirmed()
+            is MeetingViewEvent.OnCloseRequested -> onCloseRequested(event)
+            MeetingViewEvent.OnCloseConfirmed -> onCloseConfirmed()
         }
+    }
+
+    private fun onAccessChanged(event: MeetingViewEvent.OnAccessChanged) {
+        changeAccess(event)
+    }
+
+    private fun onRefresh() {
+        if (viewState.value.isOnline) {
+            updateState { it.copy(issue = null) }
+            refresh()
+        }
+    }
+
+    private fun onMeetingsRequested() {
+        if (authorized() && !pending()) {
+            open(MeetingSheet.List)
+            if (viewState.value.isOnline) refresh() else showIssue(MeetingIssue.Offline)
+        }
+    }
+
+    private fun onCreateRequested() {
+        openCreate()
+    }
+
+    private fun onDateChanged(event: MeetingViewEvent.OnDateChanged) {
+        editDraft { copy(date = event.date, dateIssue = null) }
+    }
+
+    private fun onTimeChanged(event: MeetingViewEvent.OnTimeChanged) {
+        editDraft { copy(time = event.time, timeIssue = null) }
+    }
+
+    private fun onDurationChanged(event: MeetingViewEvent.OnDurationChanged) {
+        editDraft { copy(durationMinutes = event.minutes, durationIssue = null) }
+    }
+
+    private fun onCustomDurationChanged(event: MeetingViewEvent.OnCustomDurationChanged) {
+        editDraft { copy(customMinutes = event.minutes, durationIssue = null) }
+    }
+
+    private fun onCreateConfirmed() {
+        create()
+    }
+
+    private fun onProposalsLoadMore() {
+        loadMoreProposals()
+    }
+
+    private fun onVotersLoadMore() {
+        loadVoters(append = true)
+    }
+
+    private fun onVotersRetry() {
+        loadVoters()
+    }
+
+    private fun onProposalSelected(event: MeetingViewEvent.OnProposalSelected) {
+        select(event.proposalId)
+    }
+
+    private fun onVotersRequested(event: MeetingViewEvent.OnVotersRequested) {
+        if (authorized() && event.proposalId in snapshots) {
+            open(MeetingSheet.Voters(event.proposalId))
+            loadVoters()
+        }
+    }
+
+    private fun onBookRequested(event: MeetingViewEvent.OnBookRequested) {
+        if (checkAction(event.proposalId) { bookableIds }) {
+            open(MeetingSheet.Booking(event.proposalId))
+        }
+    }
+
+    private fun onBookConfirmed() {
+        book(confirmOverlap = false)
+    }
+
+    private fun onOverlapConfirmed() {
+        book(confirmOverlap = true)
+    }
+
+    private fun onCloseRequested(event: MeetingViewEvent.OnCloseRequested) {
+        if (checkAction(event.proposalId) { closableIds }) {
+            open(MeetingSheet.Close(event.proposalId))
+        }
+    }
+
+    private fun onCloseConfirmed() {
+        close()
     }
 
     fun onRealtimeChange(id: String? = null) {
@@ -290,7 +360,7 @@ internal class MeetingViewModel(
             votersCursor = page.nextCursor
             updateState { it.copy(
                 voters = ((if (append) it.voters else emptyList()) + page.items)
-                    .distinctBy { vote -> vote.userId ?: vote },
+                    .distinctBy { voter -> voter.userId ?: voter },
                 hasMoreVoters = page.nextCursor != null, isLoadingVoters = false,
             ) }
         }
@@ -306,7 +376,7 @@ internal class MeetingViewModel(
         ) }
     }
 
-    private fun dismiss() {
+    private fun onDismiss() {
         if (pending()) return
         votersJob?.cancel()
         votersCursor = null
@@ -377,7 +447,7 @@ internal class MeetingViewModel(
         }
     }
 
-    private fun vote(id: String, going: Boolean) {
+    private fun onVote(id: String, going: Boolean) {
         if (!checkAction(id) { votableIds }) return
         val proposal = snapshots.getValue(id)
         // A recent server update may already satisfy the action shown to the user.

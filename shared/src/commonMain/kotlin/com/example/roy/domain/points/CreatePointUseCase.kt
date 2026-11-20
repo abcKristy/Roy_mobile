@@ -9,9 +9,9 @@ import com.example.roy.domain.map.Position
 import kotlin.time.Instant
 import kotlinx.serialization.Serializable
 
-internal const val OtherTopicKey = "other"
-internal const val MaxCustomTopicLength = 40
-internal const val MaxPointAddressLength = 300
+internal const val OTHER_TOPIC_KEY = "other"
+internal const val MAX_CUSTOM_TOPIC_LENGTH = 40
+internal const val MAX_POINT_ADDRESS_LENGTH = 300
 
 internal data class TopicPreset(val key: String, val label: String)
 
@@ -117,7 +117,7 @@ internal class CreatePointUseCase(
 
     fun validatedPayload(draft: CreatePointDraft, presets: List<TopicPreset>): CreatePointPayload? {
         val topic = draft.topic ?: return null
-        val normalizedTopic = if (topic.presetKey == OtherTopicKey) {
+        val normalizedTopic = if (topic.presetKey == OTHER_TOPIC_KEY) {
             val label = topic.customLabel?.trim()?.takeIf(::validCustomTopicLabel) ?: return null
             topic.copy(customLabel = label)
         } else {
@@ -130,8 +130,8 @@ internal class CreatePointUseCase(
     }
 }
 
-internal fun validCustomTopicLabel(label: String): Boolean = validPointText(label, MaxCustomTopicLength)
-internal fun validPointAddress(address: String): Boolean = validPointText(address, MaxPointAddressLength)
+internal fun validCustomTopicLabel(label: String): Boolean = validPointText(label, MAX_CUSTOM_TOPIC_LENGTH)
+internal fun validPointAddress(address: String): Boolean = validPointText(address, MAX_POINT_ADDRESS_LENGTH)
 
 private fun validPointText(value: String, limit: Int): Boolean {
     val trimmed = value.trim()

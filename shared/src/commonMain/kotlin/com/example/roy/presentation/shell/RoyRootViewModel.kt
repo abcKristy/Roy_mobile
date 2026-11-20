@@ -18,7 +18,7 @@ internal class RoyRootViewModel(private val session: SessionCoordinator) :
     override fun handleEvent(event: RoyRootViewEvent) {
         when (event) {
             is RoyRootViewEvent.OnTabSelected -> onTabSelected(event.tab)
-            RoyRootViewEvent.Logout -> logout()
+            RoyRootViewEvent.OnLogout -> onLogout()
         }
     }
 
@@ -26,7 +26,7 @@ internal class RoyRootViewModel(private val session: SessionCoordinator) :
         viewModelScope.launch { sendAction(RoyRootViewAction.OpenTab(tab)) }
     }
 
-    private fun logout() {
+    private fun onLogout() {
         if (viewState.value.isLoggingOut) return
         updateState { RoyRootOperations(isLoggingOut = true) }
         viewModelScope.launch {

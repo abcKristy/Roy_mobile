@@ -47,7 +47,7 @@ class NotificationViewModelTest {
         val model = fixture.model()
         try {
             runCurrent()
-            model.handleEvent(NotificationEvent.Refresh(NotificationMode.Center))
+            model.handleEvent(NotificationEvent.OnRefresh(NotificationMode.Center))
             runCurrent()
             val confirmed = fixture.entry.copy(readAt = fixture.entry.createdAt, target = NotificationTarget.fromPush(
                 "1", "nearby_meeting", fixture.entry.id, "00000000-0000-0000-0000-000000000004", null, null,
@@ -73,7 +73,7 @@ class NotificationViewModelTest {
         val model = fixture.model()
         try {
             runCurrent()
-            model.handleEvent(NotificationEvent.Refresh(NotificationMode.Center))
+            model.handleEvent(NotificationEvent.OnRefresh(NotificationMode.Center))
             runCurrent()
             val rejected = AuthResult.Failure(AuthError(AuthErrorCode.ServiceUnavailable))
             fixture.confirm = { rejected }
@@ -95,7 +95,7 @@ class NotificationViewModelTest {
         var nextModel: NotificationViewModel? = null
         try {
             runCurrent()
-            model.handleEvent(NotificationEvent.Refresh(NotificationMode.Center))
+            model.handleEvent(NotificationEvent.OnRefresh(NotificationMode.Center))
             runCurrent()
             assertEquals(listOf(fixture.entry), model.viewState.value.items)
             val reply = CompletableDeferred<AuthResult<NotificationEntry>>()
@@ -138,7 +138,7 @@ class NotificationViewModelTest {
         val model = fixture.model()
         try {
             runCurrent()
-            model.handleEvent(NotificationEvent.Change(NotificationChannel.PersonalPush, false))
+            model.handleEvent(NotificationEvent.OnChange(NotificationChannel.PersonalPush, false))
             runCurrent()
             assertEquals(1, fixture.updates.size)
             assertEquals(0L, fixture.updates.single().revision)
@@ -164,10 +164,10 @@ class NotificationViewModelTest {
             advanceTimeBy(501)
             assertEquals(listOf(Position(52.2, 20.2)), fixture.locations)
             model.onViewportSettled(Position(52.3, 20.3))
-            fixture.online.value = false
+            fixture.isOnline.value = false
             runCurrent()
             model.onViewportSettled(Position(52.4, 20.4))
-            fixture.online.value = true
+            fixture.isOnline.value = true
             runCurrent()
             advanceTimeBy(1_000)
             assertEquals(listOf(Position(52.2, 20.2)), fixture.locations)
@@ -183,7 +183,7 @@ class NotificationViewModelTest {
         val coordinator = SessionCoordinator(object : AuthRepository by auth {
             override suspend fun login(credentials: AuthCredentials.Login) = AuthResult.Success(loginSession)
         }, SessionTestStore().apply { saved = auth.first })
-        val online = MutableStateFlow(true)
+        val isOnline = MutableStateFlow(true)
         val updates = mutableListOf<NotificationSettings>()
         val locations = mutableListOf<Position>()
         var readCount = 0
@@ -199,7 +199,7 @@ class NotificationViewModelTest {
         suspend fun model(): NotificationViewModel {
             coordinator.restore()
             val scope = (coordinator.state.value as SessionStatus.Active).scopeId
-            return NotificationViewModel(scope, coordinator, this, online)
+            return NotificationViewModel(scope, coordinator, this, isOnline)
         }
 
         override suspend fun settings(token: String): AuthResult<NotificationSettings> =

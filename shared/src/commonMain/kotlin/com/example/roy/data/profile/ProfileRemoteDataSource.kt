@@ -10,7 +10,7 @@ import com.example.roy.data.auth.UserDto
 import com.example.roy.domain.auth.AuthError
 import com.example.roy.domain.auth.AuthErrorCode
 import com.example.roy.domain.auth.AuthResult
-import com.example.roy.domain.profile.MaxProfileAvatarBytes
+import com.example.roy.domain.profile.MAX_PROFILE_AVATAR_BYTES
 import com.example.roy.domain.profile.PickImageResult
 import com.example.roy.domain.profile.ProfileAvatar
 import com.example.roy.domain.profile.ProfileProblem
@@ -59,7 +59,7 @@ internal class ProfileRemoteDataSource(origin: String, private val transport: Au
             etag?.takeIf { '\r' !in it && '\n' !in it }?.let { put("If-None-Match", it) }
         }
         val response = transport.execute(AuthHttpRequest(
-            AuthHttpMethod.Get, "$baseUrl/users/$userId/avatar", null, token, MaxProfileAvatarBytes, headers,
+            AuthHttpMethod.Get, "$baseUrl/users/$userId/avatar", null, token, MAX_PROFILE_AVATAR_BYTES, headers,
             isBinaryResponseExpected = true,
         ))
         if (response?.status == 304) return AuthResult.Success(ProfileResult.Value(ProfileAvatar.Unchanged))

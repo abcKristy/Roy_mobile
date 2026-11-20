@@ -1,6 +1,13 @@
 package com.example.roy.push
 
 import com.example.roy.domain.notifications.NotificationTarget
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.convert
+import kotlinx.cinterop.usePinned
+import platform.CoreCrypto.CC_SHA256
+import platform.CoreCrypto.CC_SHA256_DIGEST_LENGTH
+import platform.Foundation.NSRecursiveLock
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import platform.Foundation.NSUserDefaults
@@ -19,14 +26,19 @@ import platform.UserNotifications.UNUserNotificationCenter
 import platform.darwin.dispatch_async
 import platform.darwin.dispatch_get_main_queue
 
+@OptIn(ExperimentalForeignApi::class)
 object IosPush {
     private val center = UNUserNotificationCenter.currentNotificationCenter()
     private val targets = Channel<NotificationTarget>(Channel.CONFLATED)
     internal val notificationTargets = targets.receiveAsFlow()
     private val preferences = NSUserDefaults.standardUserDefaults
+    private val accountLock = NSRecursiveLock()
+    private val installation = installationId()
+    private var accountBinding = preferences.stringForKey("royPushAccountBinding")?.takeIf { it.length == 64 }
     internal val runtime = PushRuntime(
-        installationId(), "ios", initiallyRegistered = preferences.boolForKey("royPushRegistration"),
+        installation, "ios", initiallyRegistered = preferences.boolForKey("royPushRegistration"),
         persistRegistration = { preferences.setBool(it, forKey = "royPushRegistration") },
+        onAccountChanged = ::updateAccount,
         requestAuthorization = ::requestPermission,
     )
 
@@ -42,13 +54,32 @@ object IosPush {
         }
     }
 
-    fun receiveToken(token: String) = runtime.updateToken(token)
+    fun receiveToken(token: String): Unit = runtime.updateToken(token)
 
     fun receiveNotification(
         version: String?, kind: String?, notificationId: String?, pointId: String?, chatId: String?, proposalId: String?,
-    ) {
+        recipientBinding: String?,
+    ): Unit = withAccountLock {
+        if (accountBinding == null || recipientBinding != accountBinding) return@withAccountLock
         NotificationTarget.fromPush(version, kind, notificationId, pointId, chatId, proposalId)
             ?.let(targets::trySend)
+        Unit
+    }
+
+    private fun updateAccount(userId: String?) = withAccountLock {
+        val binding = userId?.let { iosRecipientBinding(installation, it) }
+        if (accountBinding != binding) {
+            accountBinding = binding
+            preferences.setObject(binding, forKey = "royPushAccountBinding")
+            targets.tryReceive()
+            center.removeAllDeliveredNotifications()
+            center.removeAllPendingNotificationRequests()
+        }
+    }
+
+    private inline fun <T> withAccountLock(block: () -> T): T {
+        accountLock.lock()
+        return try { block() } finally { accountLock.unlock() }
     }
 
     private fun requestPermission() {
@@ -73,4 +104,14 @@ object IosPush {
         val key = "royInstallationId"
         return preferences.stringForKey(key) ?: NSUUID().UUIDString.lowercase().also { preferences.setObject(it, forKey = key) }
     }
+}
+
+@OptIn(ExperimentalForeignApi::class, ExperimentalUnsignedTypes::class)
+internal fun iosRecipientBinding(installationId: String, userId: String): String {
+    val input = "$installationId:$userId".encodeToByteArray()
+    val digest = UByteArray(CC_SHA256_DIGEST_LENGTH)
+    input.usePinned { source ->
+        digest.usePinned { target -> CC_SHA256(source.addressOf(0), input.size.convert(), target.addressOf(0)) }
+    }
+    return digest.toByteArray().toHexString()
 }

@@ -33,7 +33,7 @@ class PointDetailViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val gateway = Gateway()
-            val model = PointDetailViewModel(PointId, null, 1, true, gateway)
+            val model = PointDetailViewModel(POINT_ID, null, 1, true, gateway)
             runCurrent()
             model.handleEvent(PointDetailEvent.OnPresetSelected("other"))
             model.handleEvent(PointDetailEvent.OnCustomLabelChanged("  шахматы  "))
@@ -56,7 +56,7 @@ class PointDetailViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val gateway = Gateway()
-            val model = PointDetailViewModel(PointId, Original.id, 1, false, gateway)
+            val model = PointDetailViewModel(POINT_ID, Original.id, 1, false, gateway)
             val actions = mutableListOf<PointDetailAction>()
             backgroundScope.launch { model.viewAction.collect { actions += it } }
             runCurrent()
@@ -73,7 +73,7 @@ class PointDetailViewModelTest {
 
             assertEquals(1, gateway.leaves)
             assertTrue(model.viewState.value.isGone)
-            assertTrue(PointDetailAction.PointChanged(PointId, true) in actions)
+            assertTrue(PointDetailAction.PointChanged(POINT_ID, true) in actions)
         } finally {
             Dispatchers.resetMain()
         }
@@ -86,7 +86,7 @@ class PointDetailViewModelTest {
             val gateway = Gateway().apply {
                 addReply = DetailReply.AuthFailure(AuthError(AuthErrorCode.Network))
             }
-            val model = PointDetailViewModel(PointId, null, 1, true, gateway)
+            val model = PointDetailViewModel(POINT_ID, null, 1, true, gateway)
             runCurrent()
             model.handleEvent(PointDetailEvent.OnPresetSelected("other"))
             model.handleEvent(PointDetailEvent.OnCustomLabelChanged("Шахматы"))
@@ -110,13 +110,13 @@ class PointDetailViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
             val gateway = Gateway()
-            val model = PointDetailViewModel(PointId, null, null, false, gateway)
+            val model = PointDetailViewModel(POINT_ID, null, null, false, gateway)
             val actions = mutableListOf<PointDetailAction>()
             backgroundScope.launch { model.viewAction.collect { actions += it } }
             runCurrent()
             model.handleEvent(PointDetailEvent.OnJoinRequested)
             runCurrent()
-            assertEquals(listOf<PointDetailAction>(PointDetailAction.RequireJoin(PointId, Original.id, Original.chatId)), actions)
+            assertEquals(listOf<PointDetailAction>(PointDetailAction.RequireJoin(POINT_ID, Original.id, Original.chatId)), actions)
             assertEquals(0, gateway.joins)
         } finally {
             Dispatchers.resetMain()
@@ -151,12 +151,12 @@ class PointDetailViewModelTest {
     }
 
     private companion object {
-        const val PointId = "point"
+        const val POINT_ID = "point"
         val Original = PointTopic("topic-1", "other", "Бег", 2, "chat-1")
         val Existing = PointTopic("topic-2", "other", "Шахматы", 1, "chat-2")
         val Time = Instant.parse("2026-11-15T00:00:00Z")
         fun sample(vararg topics: PointTopic) = Point(
-            PointId, Position(55.7, 37.6), "Адрес", "manual", 2, topics.toList(), Time, Time,
+            POINT_ID, Position(55.7, 37.6), "Адрес", "manual", 2, topics.toList(), Time, Time,
         )
     }
 }

@@ -10,6 +10,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -19,10 +20,10 @@ abstract class BaseViewModel<State : Any, Event : Any, Action : Any>(initialStat
     private val state = MutableStateFlow(initialState)
     private val actions = Channel<Action>(Channel.BUFFERED)
 
-    val viewState = state.asStateFlow()
+    val viewState: StateFlow<State> = state.asStateFlow()
 
     /** One-shot UI effects for a single Screen collector. Consumed effects are never replayed. */
-    val viewAction = actions.receiveAsFlow()
+    val viewAction: Flow<Action> = actions.receiveAsFlow()
 
     abstract fun handleEvent(event: Event)
 

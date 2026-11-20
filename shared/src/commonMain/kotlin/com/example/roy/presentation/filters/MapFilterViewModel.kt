@@ -3,48 +3,10 @@ package com.example.roy.presentation.filters
 import androidx.lifecycle.viewModelScope
 import com.example.roy.domain.auth.AuthResult
 import com.example.roy.domain.map.PointFilter
-import com.example.roy.domain.points.OtherTopicKey
+import com.example.roy.domain.points.OTHER_TOPIC_KEY
 import com.example.roy.domain.points.TopicPreset
-import com.example.roy.domain.points.validCustomTopicLabel
 import com.example.roy.presentation.core.BaseViewModel
 import kotlinx.coroutines.launch
-
-internal data class MapFilterViewState(
-    val topicKey: String?,
-    val customLabel: String,
-    val peopleMin: String,
-    val peopleMax: String,
-    val presets: List<TopicPreset> = emptyList(),
-    val loadingPresets: Boolean = true,
-    val presetError: Boolean = false,
-    val submitting: Boolean = false,
-) {
-    val rangeValid: Boolean
-        get() {
-            val min = peopleMin.toIntOrNull() ?: return false
-            val max = peopleMax.toIntOrNull() ?: return false
-            return min in 0..max && max <= 50
-        }
-
-    val labelValid: Boolean
-        get() = topicKey != OtherTopicKey || customLabel.isBlank() || validCustomTopicLabel(customLabel)
-}
-
-internal sealed class MapFilterEvent {
-    data class Topic(val key: String?) : MapFilterEvent()
-    data class CustomLabel(val label: String) : MapFilterEvent()
-    data class PeopleMin(val value: String) : MapFilterEvent()
-    data class PeopleMax(val value: String) : MapFilterEvent()
-    data object RetryPresets : MapFilterEvent()
-    data object Apply : MapFilterEvent()
-    data object Reset : MapFilterEvent()
-    data object Back : MapFilterEvent()
-}
-
-internal sealed class MapFilterAction {
-    data class Applied(val filter: PointFilter) : MapFilterAction()
-    data object Back : MapFilterAction()
-}
 
 internal class MapFilterViewModel(
     applied: PointFilter,
@@ -62,43 +24,73 @@ internal class MapFilterViewModel(
     }
 
     override fun handleEvent(event: MapFilterEvent) {
-        if (viewState.value.submitting) return
+        if (viewState.value.isSubmitting) return
         when (event) {
-            is MapFilterEvent.Topic -> updateState { it.copy(topicKey = event.key) }
-            is MapFilterEvent.CustomLabel -> updateState { it.copy(customLabel = event.label) }
-            is MapFilterEvent.PeopleMin -> updateState { it.copy(peopleMin = event.value) }
-            is MapFilterEvent.PeopleMax -> updateState { it.copy(peopleMax = event.value) }
-            MapFilterEvent.RetryPresets -> if (!viewState.value.loadingPresets) fetchPresets()
-            MapFilterEvent.Reset -> submit(PointFilter())
-            MapFilterEvent.Back -> viewModelScope.launch { sendAction(MapFilterAction.Back) }
-            MapFilterEvent.Apply -> {
-                val state = viewState.value
-                if (!state.rangeValid || !state.labelValid) return
-                submit(
-                    PointFilter(
-                        topicKey = state.topicKey,
-                        customTopicLabel = state.customLabel.trim()
-                            .takeIf { state.topicKey == OtherTopicKey && it.isNotEmpty() },
-                        peopleMin = state.peopleMin.toInt().takeUnless { it == 0 },
-                        peopleMax = state.peopleMax.toInt().takeUnless { it == 50 },
-                    ),
-                )
-            }
+            is MapFilterEvent.OnTopic -> onTopic(event)
+            is MapFilterEvent.OnCustomLabel -> onCustomLabel(event)
+            is MapFilterEvent.OnPeopleMin -> onPeopleMin(event)
+            is MapFilterEvent.OnPeopleMax -> onPeopleMax(event)
+            MapFilterEvent.OnRetryPresets -> onRetryPresets()
+            MapFilterEvent.OnReset -> onReset()
+            MapFilterEvent.OnBack -> onBack()
+            MapFilterEvent.OnApply -> onApply()
         }
     }
 
+    private fun onTopic(event: MapFilterEvent.OnTopic) {
+        updateState { it.copy(topicKey = event.key) }
+    }
+
+    private fun onCustomLabel(event: MapFilterEvent.OnCustomLabel) {
+        updateState { it.copy(customLabel = event.label) }
+    }
+
+    private fun onPeopleMin(event: MapFilterEvent.OnPeopleMin) {
+        updateState { it.copy(peopleMin = event.value) }
+    }
+
+    private fun onPeopleMax(event: MapFilterEvent.OnPeopleMax) {
+        updateState { it.copy(peopleMax = event.value) }
+    }
+
+    private fun onRetryPresets() {
+        if (!viewState.value.isLoadingPresets) fetchPresets()
+    }
+
+    private fun onReset() {
+        submit(PointFilter())
+    }
+
+    private fun onBack() {
+        viewModelScope.launch { sendAction(MapFilterAction.Back) }
+    }
+
+    private fun onApply() {
+        val state = viewState.value
+        if (!state.isRangeValid || !state.isLabelValid) return
+        submit(
+            PointFilter(
+                topicKey = state.topicKey,
+                customTopicLabel = state.customLabel.trim()
+                    .takeIf { state.topicKey == OTHER_TOPIC_KEY && it.isNotEmpty() },
+                peopleMin = state.peopleMin.toInt().takeUnless { it == 0 },
+                peopleMax = state.peopleMax.toInt().takeUnless { it == 50 },
+            ),
+        )
+    }
+
     private fun fetchPresets() {
-        updateState { it.copy(loadingPresets = true, presetError = false) }
+        updateState { it.copy(isLoadingPresets = true, hasPresetError = false) }
         viewModelScope.launch {
             when (val result = loadPresets()) {
-                is AuthResult.Success -> updateState { it.copy(loadingPresets = false, presets = result.value) }
-                is AuthResult.Failure -> updateState { it.copy(loadingPresets = false, presetError = true) }
+                is AuthResult.Success -> updateState { it.copy(isLoadingPresets = false, presets = result.value) }
+                is AuthResult.Failure -> updateState { it.copy(isLoadingPresets = false, hasPresetError = true) }
             }
         }
     }
 
     private fun submit(filter: PointFilter) {
-        updateState { it.copy(submitting = true) }
+        updateState { it.copy(isSubmitting = true) }
         viewModelScope.launch { sendAction(MapFilterAction.Applied(filter)) }
     }
 }

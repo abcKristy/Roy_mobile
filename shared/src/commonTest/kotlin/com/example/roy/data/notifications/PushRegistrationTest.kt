@@ -8,6 +8,7 @@ import com.example.roy.domain.auth.AuthResult
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.SessionStatus
 import com.example.roy.domain.auth.SessionTestRepository
+import com.example.roy.domain.auth.rotated
 import com.example.roy.domain.auth.SessionTestStore
 import com.example.roy.push.PushAuthorization
 import com.example.roy.push.PushRuntime
@@ -26,6 +27,31 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PushRegistrationTest {
+    @Test
+    fun expiredAccessRetriesRegistrationWithRefreshedCredentialsWithoutAnotherNativeEvent() = runTest {
+        val auth = SessionTestRepository()
+        val rotated = auth.rotated()
+        var refreshes = 0
+        auth.rotation = { refreshes++; AuthResult.Success(rotated) }
+        val session = SessionCoordinator(auth, SessionTestStore().apply { saved = auth.first })
+        session.restore()
+        val requests = mutableListOf<AuthHttpRequest>()
+        val runtime = PushRuntime("04bc8bc5-f271-47f2-9035-be434691a450", "android") {}
+        val registration = PushRegistration("https://example.invalid", AuthHttpTransport { request ->
+            requests += request
+            AuthHttpResponse(if (request.accessToken == rotated.accessToken) 200 else 401, "")
+        }, session, runtime)
+        runtime.updateAuthorization(PushAuthorization.Allowed)
+        runtime.updateToken("synthetic-token")
+        backgroundScope.launch { registration.observe(MutableStateFlow(true)) }
+        runCurrent()
+
+        assertEquals(listOf(auth.first.accessToken, rotated.accessToken), requests.map { it.accessToken })
+        assertEquals(1, refreshes)
+        assertEquals(requests.first().body, requests.last().body)
+        assertTrue(runtime.hasRegistration)
+    }
+
     @Test
     fun registersOnlyAllowedInstallationRotatesAndUnbindsBeforeLogout() = runTest {
         val auth = SessionTestRepository().apply { revoke = { AuthResult.Success(Unit) } }

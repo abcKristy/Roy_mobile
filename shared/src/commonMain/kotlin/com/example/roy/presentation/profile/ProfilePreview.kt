@@ -12,7 +12,7 @@ private val previewUser = AuthUser("preview", "Анна Тихонова", null,
 @Composable
 private fun ProfileLightPreview() {
     RoyTheme(darkTheme = false) {
-        ProfileView(ProfileViewState(user = previewUser, nameDraft = previewUser.displayName), {}, {}, {})
+        ProfileView(ProfileViewState(user = previewUser, nameDraft = previewUser.displayName), {})
     }
 }
 
@@ -20,6 +20,6 @@ private fun ProfileLightPreview() {
 @Composable
 private fun ProfileDarkPreview() {
     RoyTheme(darkTheme = true) {
-        ProfileView(ProfileViewState(user = previewUser, nameDraft = previewUser.displayName, isOnline = false), {}, {}, {})
+        ProfileView(ProfileViewState(user = previewUser, nameDraft = previewUser.displayName, isOnline = false), {})
     }
 }

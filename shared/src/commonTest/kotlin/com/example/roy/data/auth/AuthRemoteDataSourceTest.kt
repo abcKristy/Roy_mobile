@@ -123,6 +123,10 @@ class AuthRemoteDataSourceTest {
         assertEquals(decoded.user.phone, restored.user.phone)
         assertEquals(decoded.user.ageYears, restored.user.ageYears)
         assertNull(restored.user.avatarUrl)
+        kotlin.test.assertTrue(restored.isOfflineRestoreAllowed)
+        val pendingLogout = AuthSession(decoded.accessToken, decoded.expiresAt, decoded.refreshToken,
+            decoded.refreshExpiresAt, decoded.user, isOfflineRestoreAllowed = false)
+        assertFalse(AuthSessionCodec.decode(AuthSessionCodec.encode(pendingLogout)).isOfflineRestoreAllowed)
         assertFailsWith<IllegalArgumentException> {
             AuthSessionCodec.decode(SESSION.replace("test-refresh", ""))
         }

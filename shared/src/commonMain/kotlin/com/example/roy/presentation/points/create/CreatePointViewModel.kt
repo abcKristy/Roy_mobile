@@ -9,13 +9,11 @@ import com.example.roy.domain.points.CreatePointDraft
 import com.example.roy.domain.points.CreatePointField
 import com.example.roy.domain.points.CreatePointOutcome
 import com.example.roy.domain.points.CreatePointUseCase
-import com.example.roy.domain.points.CreatedPointDestination
 import com.example.roy.domain.points.CreationContext
 import com.example.roy.domain.points.NearbyPoint
-import com.example.roy.domain.points.OtherTopicKey
+import com.example.roy.domain.points.OTHER_TOPIC_KEY
 import com.example.roy.domain.points.PointAddressSource
 import com.example.roy.domain.points.PointTopicInput
-import com.example.roy.domain.points.TopicPreset
 import com.example.roy.domain.points.validCustomTopicLabel
 import com.example.roy.domain.points.validPointAddress
 import com.example.roy.presentation.core.BaseViewModel
@@ -47,45 +45,6 @@ internal sealed class CreatePointDialog {
     data class Blocked(val until: Instant) : CreatePointDialog()
 }
 
-internal data class CreatePointViewState(
-    val draft: CreatePointDraft,
-    val presets: List<TopicPreset> = emptyList(),
-    val isLoadingPresets: Boolean = true,
-    val hasPresetError: Boolean = false,
-    val suggestionStatus: AddressSuggestionStatus = AddressSuggestionStatus.Loading,
-    val suggestion: String? = null,
-    val context: CreationContext? = null,
-    val isLoadingContext: Boolean = true,
-    val hasContextError: Boolean = false,
-    val blockedUntil: Instant? = null,
-    val isSubmitting: Boolean = false,
-    val isCreated: Boolean = false,
-    val hasUncertainAttempt: Boolean = false,
-    val fieldError: CreatePointField? = null,
-    val issue: CreatePointIssue? = null,
-    val dialog: CreatePointDialog? = null,
-    val canPublish: Boolean = false,
-)
-
-internal sealed class CreatePointViewEvent {
-    data object OnClose : CreatePointViewEvent()
-    data object OnReloadPresets : CreatePointViewEvent()
-    data object OnReloadContext : CreatePointViewEvent()
-    data class OnSelectPreset(val key: String) : CreatePointViewEvent()
-    data object OnAcceptSuggestion : CreatePointViewEvent()
-    data object OnEditAddress : CreatePointViewEvent()
-    data class OnEditDialogText(val text: String) : CreatePointViewEvent()
-    data object OnConfirmDialog : CreatePointViewEvent()
-    data object OnCancelDialog : CreatePointViewEvent()
-    data object OnPublish : CreatePointViewEvent()
-}
-
-internal sealed class CreatePointViewAction {
-    data object Close : CreatePointViewAction()
-    data object SessionExpired : CreatePointViewAction()
-    data class Created(val destination: CreatedPointDestination) : CreatePointViewAction()
-}
-
 internal class CreatePointViewModel(
     position: Position,
     private val useCase: CreatePointUseCase,
@@ -108,20 +67,34 @@ internal class CreatePointViewModel(
         if (state.hasUncertainAttempt && event !in uncertainAttemptEvents) return
         if (state.dialog != null && event !in dialogEvents && event !is CreatePointViewEvent.OnEditDialogText) return
         when (event) {
-            CreatePointViewEvent.OnClose -> close()
-            CreatePointViewEvent.OnReloadPresets -> if (!state.isLoadingPresets) loadPresets()
-            CreatePointViewEvent.OnReloadContext -> if (!state.isLoadingContext) loadContext()
-            is CreatePointViewEvent.OnSelectPreset -> selectPreset(event.key)
-            CreatePointViewEvent.OnAcceptSuggestion -> acceptSuggestion()
-            CreatePointViewEvent.OnEditAddress -> openAddressEditor()
-            is CreatePointViewEvent.OnEditDialogText -> editDialogText(event.text)
-            CreatePointViewEvent.OnConfirmDialog -> confirmDialog()
-            CreatePointViewEvent.OnCancelDialog -> cancelDialog()
-            CreatePointViewEvent.OnPublish -> publish()
+            CreatePointViewEvent.OnClose -> onClose()
+            CreatePointViewEvent.OnReloadPresets -> onReloadPresets()
+            CreatePointViewEvent.OnReloadContext -> onReloadContext()
+            is CreatePointViewEvent.OnSelectPreset -> onSelectPreset(event.key)
+            CreatePointViewEvent.OnAcceptSuggestion -> onAcceptSuggestion()
+            CreatePointViewEvent.OnEditAddress -> onEditAddress()
+            is CreatePointViewEvent.OnEditDialogText -> onEditDialogText(event.text)
+            CreatePointViewEvent.OnConfirmDialog -> onConfirmDialog()
+            CreatePointViewEvent.OnCancelDialog -> onCancelDialog()
+            CreatePointViewEvent.OnPublish -> onPublish()
         }
     }
 
-    private fun close() {
+    private fun onReloadPresets() {
+        val state = viewState.value
+        if (!state.isLoadingPresets) loadPresets()
+    }
+
+    private fun onReloadContext() {
+        val state = viewState.value
+        if (!state.isLoadingContext) loadContext()
+    }
+
+    private fun onEditAddress() {
+        openAddressEditor()
+    }
+
+    private fun onClose() {
         viewModelScope.launch { sendAction(CreatePointViewAction.Close) }
     }
 
@@ -180,9 +153,9 @@ internal class CreatePointViewModel(
         }
     }
 
-    private fun selectPreset(key: String) {
+    private fun onSelectPreset(key: String) {
         val state = viewState.value
-        if (key == OtherTopicKey) {
+        if (key == OTHER_TOPIC_KEY) {
             updateForm {
                 it.copy(dialog = CreatePointDialog.CustomTopic(state.draft.topic?.customLabel.orEmpty()))
             }
@@ -191,7 +164,7 @@ internal class CreatePointViewModel(
         }
     }
 
-    private fun acceptSuggestion() {
+    private fun onAcceptSuggestion() {
         val suggestion = viewState.value.suggestion ?: return
         editDraft(CreatePointField.Address) { copy(address = suggestion, addressSource = PointAddressSource.Provider) }
     }
@@ -202,7 +175,7 @@ internal class CreatePointViewModel(
         updateForm { it.copy(dialog = CreatePointDialog.Address(initial)) }
     }
 
-    private fun editDialogText(value: String) = updateForm {
+    private fun onEditDialogText(value: String) = updateForm {
         val dialog = when (val current = it.dialog) {
             is CreatePointDialog.Address -> current.copy(text = value, hasError = false)
             is CreatePointDialog.CustomTopic -> current.copy(text = value, hasError = false)
@@ -211,13 +184,13 @@ internal class CreatePointViewModel(
         it.copy(dialog = dialog)
     }
 
-    private fun confirmDialog() {
+    private fun onConfirmDialog() {
         when (val dialog = viewState.value.dialog) {
             is CreatePointDialog.Address -> confirmAddress(dialog)
             is CreatePointDialog.CustomTopic -> confirmCustomTopic(dialog)
             is CreatePointDialog.Nearby -> confirmNearby()
             CreatePointDialog.LastSlot -> confirmLastSlot()
-            is CreatePointDialog.Blocked -> cancelDialog()
+            is CreatePointDialog.Blocked -> onCancelDialog()
             null -> Unit
         }
     }
@@ -238,7 +211,7 @@ internal class CreatePointViewModel(
             return
         }
         editDraft(CreatePointField.Topic) {
-            copy(topic = PointTopicInput(OtherTopicKey, dialog.text.trim()))
+            copy(topic = PointTopicInput(OTHER_TOPIC_KEY, dialog.text.trim()))
         }
     }
 
@@ -261,7 +234,7 @@ internal class CreatePointViewModel(
         }
     }
 
-    private fun cancelDialog() {
+    private fun onCancelDialog() {
         when (viewState.value.dialog) {
             is CreatePointDialog.Nearby, CreatePointDialog.LastSlot -> {
                 attempt = null
@@ -273,7 +246,7 @@ internal class CreatePointViewModel(
     }
 
     @OptIn(ExperimentalUuidApi::class)
-    private fun publish() {
+    private fun onPublish() {
         val state = viewState.value
         if (!state.canPublish) return
         val payload = useCase.validatedPayload(state.draft, state.presets) ?: return
@@ -309,7 +282,7 @@ internal class CreatePointViewModel(
     }
 
     private fun confirmNearby() {
-        val confirmed = attempt?.copy(confirmNearby = true) ?: return cancelDialog()
+        val confirmed = attempt?.copy(confirmNearby = true) ?: return onCancelDialog()
         attempt = confirmed
         warnLastSlotOrSubmit(confirmed)
     }
@@ -323,7 +296,7 @@ internal class CreatePointViewModel(
     }
 
     private fun confirmLastSlot() {
-        val current = attempt ?: return cancelDialog()
+        val current = attempt ?: return onCancelDialog()
         hasAcceptedLastSlot = true
         submit(current)
     }

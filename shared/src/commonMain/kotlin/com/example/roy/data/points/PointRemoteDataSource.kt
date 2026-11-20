@@ -65,7 +65,7 @@ internal class PointRemoteDataSource(
                 url = "$origin/api/v1/$path",
                 body = null,
                 accessToken = null,
-                maxResponseBytes = MaxPointResponseBytes,
+                maxResponseBytes = MAX_POINT_RESPONSE_BYTES,
             ),
         ) ?: return PointResult.Failure(PointError.Network)
 
@@ -141,4 +141,4 @@ private data class PointErrorDto(val code: String)
 private val PointJson = Json { ignoreUnknownKeys = true }
 private val PointId = Regex("[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
 private val ApiOrigin = Regex("""(?:https://[A-Za-z0-9.-]+|http://127\.0\.0\.1)(?::([0-9]{1,5}))?""")
-private const val MaxPointResponseBytes = 2 * 1024 * 1024
+private const val MAX_POINT_RESPONSE_BYTES = 2 * 1024 * 1024

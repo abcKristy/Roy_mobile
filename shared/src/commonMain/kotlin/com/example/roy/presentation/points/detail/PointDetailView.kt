@@ -26,7 +26,6 @@ import com.example.roy.presentation.components.cards.RoyCard
 import com.example.roy.presentation.components.feedback.ErrorState
 import com.example.roy.presentation.components.feedback.LoadingMode
 import com.example.roy.presentation.components.feedback.LoadingState
-import com.example.roy.presentation.components.overlays.RoyDialog
 import com.example.roy.presentation.map.mapTopicIcon
 import com.example.roy.presentation.theme.RoyTheme
 import org.jetbrains.compose.resources.painterResource
@@ -57,25 +56,25 @@ internal data class PointDetailStrings(
 
 @Composable
 internal fun PointDetailView(
-    state: PointDetailState,
+    viewState: PointDetailState,
     strings: PointDetailStrings,
     eventHandler: (PointDetailEvent) -> Unit,
 ) {
     val colors = RoyTheme.colors
     val typography = RoyTheme.typography
     val spacing = RoyTheme.dimensions.spacing
-    val point = state.point
+    val point = viewState.point
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(spacing.medium),
         verticalArrangement = Arrangement.spacedBy(spacing.medium),
     ) {
         TertiaryButton(
-            label = if (state.isGone) strings.map else strings.back,
+            label = if (viewState.isGone) strings.map else strings.back,
             onClick = { eventHandler(PointDetailEvent.OnBack) },
-            isEnabled = state.operation == null,
+            isEnabled = viewState.operation == null,
         )
         when {
-            state.isGone -> BasicText(
+            viewState.isGone -> BasicText(
                 strings.gone,
                 modifier = Modifier.semantics {
                     heading()
@@ -94,46 +93,34 @@ internal fun PointDetailView(
                     BasicText(strings.empty, style = typography.body.copy(color = colors.textSecondary))
                 }
                 for (topic in point.topics) {
-                    TopicCard(topic, state, strings.topicCounts.getValue(topic.id), eventHandler)
+                    TopicCard(topic, viewState, strings.topicCounts.getValue(topic.id), eventHandler)
                 }
-                state.selectedTopic?.let { topic ->
+                viewState.selectedTopic?.let { topic ->
                     BasicText(strings.description, style = typography.body.copy(color = colors.textPrimary))
-                    MembershipActions(topic, state, strings, eventHandler)
+                    MembershipActions(topic, viewState, strings, eventHandler)
                 }
                 SecondaryButton(
                     text = strings.add,
                     onClick = { eventHandler(PointDetailEvent.OnAddRequested) },
                     modifier = Modifier.fillMaxWidth(),
-                    isEnabled = !state.isBusy,
+                    isEnabled = !viewState.isBusy,
                 )
             }
         }
-        if (state.isLoading) {
+        if (viewState.isLoading) {
             LoadingState(LoadingMode.Inline, strings.loading)
         }
         strings.error?.let { error ->
-            ErrorState(error, !state.isBusy, { eventHandler(PointDetailEvent.OnRetry) })
+            ErrorState(error, !viewState.isBusy, { eventHandler(PointDetailEvent.OnRetry) })
         }
     }
-    if (state.isAddSheetOpen) AddTopicSheet(state, strings, eventHandler)
-    if (state.isLeaveDialogOpen) {
-        RoyDialog(
-            title = strings.leaveTitle,
-            body = strings.leaveBody,
-            confirmText = strings.leave,
-            cancelText = strings.cancel,
-            onConfirm = { eventHandler(PointDetailEvent.OnLeaveConfirmed) },
-            onCancel = { eventHandler(PointDetailEvent.OnDialogDismissed) },
-            isSubmitting = state.operation == PointDetailOperation.Leave,
-            isDestructive = true,
-        )
-    }
+
 }
 
 @Composable
 private fun TopicCard(
     topic: PointTopic,
-    state: PointDetailState,
+    viewState: PointDetailState,
     count: String,
     eventHandler: (PointDetailEvent) -> Unit,
 ) {
@@ -142,8 +129,8 @@ private fun TopicCard(
     val spacing = RoyTheme.dimensions.spacing
     RoyCard(
         modifier = Modifier.fillMaxWidth(),
-        isSelected = state.selectedTopicId == topic.id,
-        onClick = if (state.isBusy) null else { { eventHandler(PointDetailEvent.OnTopicSelected(topic.id)) } },
+        isSelected = viewState.selectedTopicId == topic.id,
+        onClick = if (viewState.isBusy) null else { { eventHandler(PointDetailEvent.OnTopicSelected(topic.id)) } },
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(spacing.small)) {
             Image(
@@ -163,24 +150,24 @@ private fun TopicCard(
 @Composable
 private fun MembershipActions(
     topic: PointTopic,
-    state: PointDetailState,
+    viewState: PointDetailState,
     strings: PointDetailStrings,
     eventHandler: (PointDetailEvent) -> Unit,
 ) {
-    val isMember = topic.chatId in state.memberChatIds
+    val isMember = topic.chatId in viewState.memberChatIds
     PrimaryButton(
         text = if (isMember) strings.open else strings.join,
         onClick = { eventHandler(PointDetailEvent.OnJoinRequested) },
         modifier = Modifier.fillMaxWidth(),
-        isEnabled = !state.isBusy && (!state.isAuthorized || state.isMembershipKnown || isMember),
-        isSubmitting = state.operation == PointDetailOperation.Join,
+        isEnabled = !viewState.isBusy && (!viewState.isAuthorized || viewState.isMembershipKnown || isMember),
+        isSubmitting = viewState.operation == PointDetailOperation.Join,
     )
     if (isMember) {
         TertiaryButton(
             label = strings.leave,
             onClick = { eventHandler(PointDetailEvent.OnLeaveRequested) },
             modifier = Modifier.fillMaxWidth(),
-            isEnabled = !state.isBusy,
+            isEnabled = !viewState.isBusy,
         )
     }
 }

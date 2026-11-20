@@ -47,7 +47,26 @@ import com.example.roy.presentation.auth.components.PolicyLink
 import com.example.roy.presentation.theme.RoyTheme
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
-import roy.shared.generated.resources.*
+import roy.shared.generated.resources.Res
+import roy.shared.generated.resources.auth_age
+import roy.shared.generated.resources.auth_back
+import roy.shared.generated.resources.auth_consent
+import roy.shared.generated.resources.auth_create_intro
+import roy.shared.generated.resources.auth_create_title
+import roy.shared.generated.resources.auth_create_title_button
+import roy.shared.generated.resources.auth_hide_password
+import roy.shared.generated.resources.auth_login_button
+import roy.shared.generated.resources.auth_login_intro
+import roy.shared.generated.resources.auth_login_title
+import roy.shared.generated.resources.auth_name
+import roy.shared.generated.resources.auth_password
+import roy.shared.generated.resources.auth_phone
+import roy.shared.generated.resources.auth_policy
+import roy.shared.generated.resources.auth_policy_loading
+import roy.shared.generated.resources.auth_policy_retry
+import roy.shared.generated.resources.auth_return_login
+import roy.shared.generated.resources.auth_show_password
+import roy.shared.generated.resources.auth_switch_register
 
 @Composable
 internal fun AuthView(
@@ -58,9 +77,9 @@ internal fun AuthView(
     eventHandler: (AuthViewEvent) -> Unit,
 ) {
     val isRegistration = viewState.mode == AuthMode.Register
-    val enabled = !viewState.submitting
+    val enabled = !viewState.isSubmitting
     val ready = enabled && (!isRegistration ||
-        (viewState.policy != null && !viewState.policyLoading &&
+        (viewState.policy != null && !viewState.isPolicyLoading &&
             viewState.acceptedPrivacyPolicyVersion == viewState.policy.version))
     val spacing = RoyTheme.dimensions.spacing
     var phoneFocusRequest by remember { mutableIntStateOf(0) }
@@ -70,7 +89,7 @@ internal fun AuthView(
     val submit = {
         if (ready) {
             focus.clearFocus()
-            eventHandler(AuthViewEvent.Submit(password))
+            eventHandler(AuthViewEvent.OnSubmit(password))
         }
     }
 
@@ -84,7 +103,7 @@ internal fun AuthView(
             verticalArrangement = Arrangement.spacedBy(spacing.compact),
         ) {
             if (isRegistration) {
-                AuthBackButton(enabled) { eventHandler(AuthViewEvent.SwitchMode) }
+                AuthBackButton(enabled) { eventHandler(AuthViewEvent.OnSwitchMode) }
             }
             BasicText(
                 stringResource(if (isRegistration) Res.string.auth_create_title else Res.string.auth_login_title),
@@ -102,7 +121,7 @@ internal fun AuthView(
                         label = stringResource(Res.string.auth_name),
                         errorText = errors[AuthField.DisplayName],
                         isEnabled = enabled,
-                        onValueChange = { eventHandler(AuthViewEvent.DisplayNameChanged(it)) },
+                        onValueChange = { eventHandler(AuthViewEvent.OnDisplayNameChanged(it)) },
                         onImeNext = { phoneFocusRequest++ },
                     )
                 }
@@ -113,7 +132,7 @@ internal fun AuthView(
                     contentDescription = phoneLabel,
                     errorText = errors[AuthField.Phone],
                     isEnabled = enabled,
-                    onValueChange = { eventHandler(AuthViewEvent.PhoneChanged(it)) },
+                    onValueChange = { eventHandler(AuthViewEvent.OnPhoneChanged(it)) },
                     onImeNext = { passwordFocus.requestFocus() },
                     focusRequest = phoneFocusRequest,
                 )
@@ -123,17 +142,17 @@ internal fun AuthView(
                     errorText = errors[AuthField.Password],
                     isEnabled = enabled,
                     imeAction = if (isRegistration) ImeAction.Next else ImeAction.Done,
-                    onValueChange = { eventHandler(AuthViewEvent.PasswordChanged(it)) },
+                    onValueChange = { eventHandler(AuthViewEvent.OnPasswordChanged(it)) },
                     onImeAction = if (isRegistration) ({ ageFocus.requestFocus(); Unit }) else submit,
                     modifier = Modifier.focusRequester(passwordFocus),
-                    isVisible = viewState.passwordVisible,
+                    isVisible = viewState.isPasswordVisible,
                     visibilityButton = {
                         PasswordVisibilityButton(
-                            isVisible = viewState.passwordVisible,
+                            isVisible = viewState.isPasswordVisible,
                             isEnabled = enabled,
                             showLabel = stringResource(Res.string.auth_show_password),
                             hideLabel = stringResource(Res.string.auth_hide_password),
-                            onToggle = { eventHandler(AuthViewEvent.TogglePasswordVisibility) },
+                            onToggle = { eventHandler(AuthViewEvent.OnTogglePasswordVisibility) },
                         )
                     },
                 )
@@ -144,7 +163,7 @@ internal fun AuthView(
                         errorText = errors[AuthField.AgeYears],
                         isEnabled = enabled,
                         imeAction = ImeAction.Done,
-                        onValueChange = { eventHandler(AuthViewEvent.AgeChanged(it)) },
+                        onValueChange = { eventHandler(AuthViewEvent.OnAgeChanged(it)) },
                         onImeAction = submit,
                         modifier = Modifier.focusRequester(ageFocus),
                     )
@@ -152,26 +171,26 @@ internal fun AuthView(
             }
             if (!isRegistration) {
                 AuthModeSwitch(stringResource(Res.string.auth_switch_register), enabled, {
-                    eventHandler(AuthViewEvent.SwitchMode)
+                    eventHandler(AuthViewEvent.OnSwitchMode)
                 })
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ConsentCheckbox(
                         isChecked = viewState.acceptedPrivacyPolicyVersion != null,
-                        isEnabled = enabled && !viewState.policyLoading,
+                        isEnabled = enabled && !viewState.isPolicyLoading,
                         policyVersion = viewState.policy?.version,
                         label = stringResource(Res.string.auth_consent),
-                        onCheckedChange = { eventHandler(AuthViewEvent.ConsentChanged(it)) },
+                        onCheckedChange = { eventHandler(AuthViewEvent.OnConsentChanged(it)) },
                     )
                     PolicyLink(
                         url = viewState.policy?.url,
-                        isLoading = viewState.policyLoading,
+                        isLoading = viewState.isPolicyLoading,
                         isEnabled = enabled,
                         policyLabel = stringResource(Res.string.auth_policy),
                         loadingLabel = stringResource(Res.string.auth_policy_loading),
                         retryLabel = stringResource(Res.string.auth_policy_retry),
-                        onOpen = { eventHandler(AuthViewEvent.OpenPolicy) },
-                        onRetry = { eventHandler(AuthViewEvent.RetryPolicy) },
+                        onOpen = { eventHandler(AuthViewEvent.OnOpenPolicy) },
+                        onRetry = { eventHandler(AuthViewEvent.OnRetryPolicy) },
                     )
                 }
             }
@@ -186,7 +205,7 @@ internal fun AuthView(
         AuthSubmitButton(
             text = stringResource(if (isRegistration) Res.string.auth_create_title_button else Res.string.auth_login_button),
             isEnabled = ready,
-            isSubmitting = viewState.submitting,
+            isSubmitting = viewState.isSubmitting,
             onSubmit = submit,
         )
     }

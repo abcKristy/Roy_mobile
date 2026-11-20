@@ -19,7 +19,7 @@ private fun FilterPreview(dark: Boolean) {
         MapFilterView(
             MapFilterViewState(
                 topicKey = "football", customLabel = "", peopleMin = "0", peopleMax = "50",
-                presets = listOf(TopicPreset("football", "Футбол")), loadingPresets = false,
+                presets = listOf(TopicPreset("football", "Футбол")), isLoadingPresets = false,
             ),
             eventHandler = {},
         )

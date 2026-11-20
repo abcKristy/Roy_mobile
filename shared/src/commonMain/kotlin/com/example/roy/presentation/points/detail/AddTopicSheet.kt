@@ -26,7 +26,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.roy.domain.points.OtherTopicKey
+import com.example.roy.domain.points.OTHER_TOPIC_KEY
 import com.example.roy.presentation.components.PrimaryButton
 import com.example.roy.presentation.components.TertiaryButton
 import com.example.roy.presentation.components.cards.RoyCard
@@ -82,7 +82,7 @@ internal fun AddTopicSheet(
                 ) {
                     if (state.isLoadingPresets) LoadingState(LoadingMode.Inline, strings.loading)
                     for (preset in state.presets) {
-                        val isExisting = preset.key != OtherTopicKey &&
+                        val isExisting = preset.key != OTHER_TOPIC_KEY &&
                             state.point?.topics?.any { it.presetKey == preset.key } == true
                         RoyCard(
                             modifier = Modifier.fillMaxWidth(),
@@ -98,7 +98,7 @@ internal fun AddTopicSheet(
                                 BasicText(strings.existing, style = typography.bodySmall.copy(color = colors.textSecondary))
                             }
                         }
-                        if (preset.key == OtherTopicKey && state.presetKey == OtherTopicKey) {
+                        if (preset.key == OTHER_TOPIC_KEY && state.presetKey == OTHER_TOPIC_KEY) {
                             RoyTextField(
                                 value = state.customLabel,
                                 label = strings.customLabel,
@@ -111,7 +111,7 @@ internal fun AddTopicSheet(
                         }
                     }
                     strings.sheetError?.takeUnless {
-                        state.sheetError == PointDetailError.InvalidTopic && state.presetKey == OtherTopicKey
+                        state.sheetError == PointDetailError.InvalidTopic && state.presetKey == OTHER_TOPIC_KEY
                     }?.let { error ->
                         BasicText(
                             error,
@@ -127,7 +127,7 @@ internal fun AddTopicSheet(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 } else {
-                    val isExistingPreset = state.presetKey != OtherTopicKey &&
+                    val isExistingPreset = state.presetKey != OTHER_TOPIC_KEY &&
                         state.point?.topics?.any { it.presetKey == state.presetKey } == true
                     PrimaryButton(
                         text = if (isExistingPreset) strings.selectExisting else strings.add,

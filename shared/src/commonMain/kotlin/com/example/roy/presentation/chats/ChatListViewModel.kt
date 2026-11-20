@@ -15,30 +15,6 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import kotlin.time.Instant
-
-internal data class ChatListViewState(
-    val rows: List<ChatListItem> = emptyList(),
-    val isLoading: Boolean = true,
-    val nextCursor: String? = null,
-    val error: AuthErrorCode? = null,
-    val isOnline: Boolean = true,
-    val cachedFetchedAt: Instant? = null,
-)
-
-internal sealed class ChatListViewEvent {
-    data object Refresh : ChatListViewEvent()
-    data object Retry : ChatListViewEvent()
-    data object LoadMore : ChatListViewEvent()
-    data object OpenMap : ChatListViewEvent()
-    data class OpenChat(val chatId: String) : ChatListViewEvent()
-    data class MembershipLost(val chatId: String) : ChatListViewEvent()
-}
-
-internal sealed class ChatListViewAction {
-    data object OpenMap : ChatListViewAction()
-    data class OpenChat(val row: ChatListItem) : ChatListViewAction()
-}
 
 internal class ChatListViewModel(
     private val scopeId: Long,
@@ -69,23 +45,37 @@ internal class ChatListViewModel(
                 job = null
                 refreshQueued = false
                 updateState { it.copy(isOnline = online) }
-                if (sessions == null || sessions.state.value == SessionStatus.Active(scopeId)) refresh()
+                if (sessions == null || sessions.state.value == SessionStatus.Active(scopeId)) onRefresh()
             }
         }
     }
 
     override fun handleEvent(event: ChatListViewEvent) {
         when (event) {
-            ChatListViewEvent.Refresh -> refresh()
-            ChatListViewEvent.Retry -> if (failedLoadingMore) loadMore() else refresh()
-            ChatListViewEvent.LoadMore -> loadMore()
-            is ChatListViewEvent.MembershipLost -> remove(event.chatId)
-            ChatListViewEvent.OpenMap -> viewModelScope.launch { sendAction(ChatListViewAction.OpenMap) }
-            is ChatListViewEvent.OpenChat -> {
-                val row = viewState.value.rows.firstOrNull { it.chatId == event.chatId } ?: return
-                viewModelScope.launch { sendAction(ChatListViewAction.OpenChat(row)) }
-            }
+            ChatListViewEvent.OnRefresh -> onRefresh()
+            ChatListViewEvent.OnRetry -> onRetry()
+            ChatListViewEvent.OnLoadMore -> onLoadMore()
+            is ChatListViewEvent.OnMembershipLost -> onMembershipLost(event)
+            ChatListViewEvent.OnOpenMap -> onOpenMap()
+            is ChatListViewEvent.OnOpenChat -> onOpenChat(event)
         }
+    }
+
+    private fun onRetry() {
+        if (failedLoadingMore) onLoadMore() else onRefresh()
+    }
+
+    private fun onMembershipLost(event: ChatListViewEvent.OnMembershipLost) {
+        remove(event.chatId)
+    }
+
+    private fun onOpenMap() {
+        viewModelScope.launch { sendAction(ChatListViewAction.OpenMap) }
+    }
+
+    private fun onOpenChat(event: ChatListViewEvent.OnOpenChat) {
+        val row = viewState.value.rows.firstOrNull { it.chatId == event.chatId } ?: return
+        viewModelScope.launch { sendAction(ChatListViewAction.OpenChat(row)) }
     }
 
     private fun remove(chatId: String) {
@@ -101,7 +91,7 @@ internal class ChatListViewModel(
         }
     }
 
-    private fun refresh() {
+    private fun onRefresh() {
         if (job?.isActive == true) {
             refreshQueued = true
             return
@@ -110,7 +100,7 @@ internal class ChatListViewModel(
         load(initialCursor = null, pageCount = loadedPages, replace = true)
     }
 
-    private fun loadMore() {
+    private fun onLoadMore() {
         if (job?.isActive == true || !viewState.value.isOnline || viewState.value.cachedFetchedAt != null) return
         val cursor = viewState.value.nextCursor ?: return
         failedLoadingMore = true
@@ -175,7 +165,7 @@ internal class ChatListViewModel(
             job = null
             if (refreshQueued) {
                 refreshQueued = false
-                refresh()
+                onRefresh()
             }
         }
     }

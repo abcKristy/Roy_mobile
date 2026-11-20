@@ -24,14 +24,14 @@ class RoyTypography internal constructor(fontFamily: FontFamily) {
             letterSpacing = 0.sp,
         )
 
-    val display = style(40, 48, FontWeight.SemiBold, fontFamily)
-    val headingLarge = style(32, 40, FontWeight.SemiBold, fontFamily)
-    val headingMedium = style(24, 32, FontWeight.SemiBold, fontFamily)
-    val headingSmall = style(20, 28, FontWeight.Medium, fontFamily)
-    val body = style(16, 24, FontWeight.Normal, fontFamily)
-    val bodySmall = style(14, 20, FontWeight.Normal, fontFamily)
-    val caption = style(12, 16, FontWeight.Medium, fontFamily)
-    val button = style(16, 20, FontWeight.SemiBold, fontFamily)
+    val display: TextStyle = style(40, 48, FontWeight.SemiBold, fontFamily)
+    val headingLarge: TextStyle = style(32, 40, FontWeight.SemiBold, fontFamily)
+    val headingMedium: TextStyle = style(24, 32, FontWeight.SemiBold, fontFamily)
+    val headingSmall: TextStyle = style(20, 28, FontWeight.Medium, fontFamily)
+    val body: TextStyle = style(16, 24, FontWeight.Normal, fontFamily)
+    val bodySmall: TextStyle = style(14, 20, FontWeight.Normal, fontFamily)
+    val caption: TextStyle = style(12, 16, FontWeight.Medium, fontFamily)
+    val button: TextStyle = style(16, 20, FontWeight.SemiBold, fontFamily)
 }
 
 @Composable

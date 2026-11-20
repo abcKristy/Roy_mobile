@@ -33,7 +33,7 @@ import com.example.roy.domain.map.PointFilterStore
 import com.example.roy.domain.points.CreatePointRepository
 import com.example.roy.domain.points.CreatePointUseCase
 import com.example.roy.domain.points.PointDetailOperations
-import com.example.roy.presentation.auth.AuthNavHost
+import com.example.roy.presentation.navigation.AuthNavHost
 import com.example.roy.presentation.filters.MapFilterScreen
 import com.example.roy.presentation.filters.MapFilterViewModel
 import com.example.roy.presentation.map.MapScreen
@@ -367,7 +367,7 @@ internal fun RoyRootScreen(
                         },
                         onApplied = {
                             if (navController.currentDestination?.hasRoute<RoyRoute.MapFilters>() == true) {
-                                mapModel.handleEvent(MapViewEvent.FilterChanged(it))
+                                mapModel.handleEvent(MapViewEvent.OnFilterChanged(it))
                                 navController.popBackStack()
                             }
                         },
@@ -401,7 +401,7 @@ internal fun RoyRootScreen(
                             if (isCurrentDetail()) openChat(pointId, topicId, chatId)
                         },
                         onPointChanged = { pointId, isGone ->
-                            mapModel.handleEvent(MapViewEvent.PointChanged(pointId, isGone))
+                            mapModel.handleEvent(MapViewEvent.OnPointChanged(pointId, isGone))
                             if (isGone) {
                                 if (isCurrentDetail() && (route.topicId != null || route.offerAddTopic)) {
                                     navController.popBackStack<RoyRoute.Map>(inclusive = false)
@@ -426,7 +426,7 @@ internal fun RoyRootScreen(
                                 route.scopeId, route.pointId, route.topicId, route.chatId, session, chatHistory,
                                 pointDetails, ChatReadCursor(route.scopeId, route.chatId, chatList), chatWriter,
                                 { chatRealtime.events(route.scopeId, route.chatId) }, connectivity,
-                                { listModel?.handleEvent(ChatListViewEvent.Refresh) },
+                                { listModel?.handleEvent(ChatListViewEvent.OnRefresh) },
                                 meetingModel::onRealtimeChange,
                                 offlineCache,
                             )
@@ -434,8 +434,8 @@ internal fun RoyRootScreen(
                         fun onMembershipChanged(result: LeaveTopicResult) {
                             if (!isCurrentChat() || session.state.value != SessionStatus.Active(route.scopeId)) return
                             changedPoint = result
-                            listModel?.handleEvent(ChatListViewEvent.MembershipLost(result.chatId))
-                            mapModel.handleEvent(MapViewEvent.PointChanged(result.pointId, result.isPointGone))
+                            listModel?.handleEvent(ChatListViewEvent.OnMembershipLost(result.chatId))
+                            mapModel.handleEvent(MapViewEvent.OnPointChanged(result.pointId, result.isPointGone))
                         }
                         TopicChatScreen(
                             viewModel = chatModel,
@@ -547,7 +547,7 @@ internal fun RoyRootScreen(
                                     (session.state.value as? SessionStatus.Active)?.scopeId == current.scopeId
                                 ) {
                                     continuation.clearTarget()
-                                    mapModel.handleEvent(MapViewEvent.PointChanged(destination.pointId, isGone = false))
+                                    mapModel.handleEvent(MapViewEvent.OnPointChanged(destination.pointId, isGone = false))
                                     navController.popBackStack<RoyRoute.Map>(inclusive = false)
                                     openChat(destination.pointId, destination.topicId, destination.chatId)
                                 }

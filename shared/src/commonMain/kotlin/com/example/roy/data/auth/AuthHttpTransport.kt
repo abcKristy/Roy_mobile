@@ -13,7 +13,7 @@ internal class AuthHttpRequest(
     val url: String,
     val body: String?,
     val accessToken: String?,
-    val maxResponseBytes: Int = MaxAuthResponseBytes,
+    val maxResponseBytes: Int = MAX_AUTH_RESPONSE_BYTES,
     val headers: Map<String, String> = emptyMap(),
     val isBinaryResponseExpected: Boolean = false,
     val requestBytes: ByteArray? = null,
@@ -34,4 +34,4 @@ internal fun interface AuthHttpTransport {
     suspend fun execute(request: AuthHttpRequest): AuthHttpResponse?
 }
 
-internal const val MaxAuthResponseBytes = 64 * 1024
+internal const val MAX_AUTH_RESPONSE_BYTES = 64 * 1024

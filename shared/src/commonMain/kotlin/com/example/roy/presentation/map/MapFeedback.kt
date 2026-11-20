@@ -16,7 +16,21 @@ import com.example.roy.presentation.components.feedback.LoadingState
 import com.example.roy.presentation.theme.RoyTheme
 import com.example.roy.presentation.offline.OfflineStatus
 import org.jetbrains.compose.resources.stringResource
-import roy.shared.generated.resources.*
+import roy.shared.generated.resources.Res
+import roy.shared.generated.resources.map_api_failed
+import roy.shared.generated.resources.map_basemap_failed
+import roy.shared.generated.resources.map_empty
+import roy.shared.generated.resources.map_filter_empty
+import roy.shared.generated.resources.map_loading
+import roy.shared.generated.resources.map_location_denied
+import roy.shared.generated.resources.map_location_disabled
+import roy.shared.generated.resources.map_location_restricted
+import roy.shared.generated.resources.map_location_unavailable
+import roy.shared.generated.resources.map_offline
+import roy.shared.generated.resources.map_reset_filter
+import roy.shared.generated.resources.map_retry
+import roy.shared.generated.resources.offline_no_basemap
+import roy.shared.generated.resources.offline_no_cache
 
 @Composable
 internal fun MapFeedback(state: MapViewState, eventHandler: (MapViewEvent) -> Unit) {
@@ -24,12 +38,12 @@ internal fun MapFeedback(state: MapViewState, eventHandler: (MapViewEvent) -> Un
         OfflineStatus(state.fetchedAt)
         MapStatus(stringResource(Res.string.offline_no_basemap), null, eventHandler)
         if (state.viewport is ViewportContent.Failed && state.fetchedAt == null) {
-            MapStatus(stringResource(Res.string.offline_no_cache), MapViewEvent.RetryViewport, eventHandler)
+            MapStatus(stringResource(Res.string.offline_no_cache), MapViewEvent.OnRetryViewport, eventHandler)
         }
         return
     }
     if (state.renderStatus == MapRenderStatus.Failed) {
-        MapStatus(stringResource(Res.string.map_basemap_failed), MapViewEvent.RetryBasemap, eventHandler)
+        MapStatus(stringResource(Res.string.map_basemap_failed), MapViewEvent.OnRetryBasemap, eventHandler)
     }
     when (val content = state.viewport) {
         ViewportContent.Loading -> if (state.points.isEmpty() && (state.query != null || state.renderStatus != MapRenderStatus.Failed)) {
@@ -41,12 +55,12 @@ internal fun MapFeedback(state: MapViewState, eventHandler: (MapViewEvent) -> Un
                 BasicText(stringResource(empty), style = RoyTheme.typography.bodySmall.copy(color = RoyTheme.colors.textPrimary))
                 if (state.query?.filter?.isActive == true) {
                     TertiaryButton(stringResource(Res.string.map_reset_filter), {
-                        eventHandler(MapViewEvent.FilterChanged(PointFilter()))
+                        eventHandler(MapViewEvent.OnFilterChanged(PointFilter()))
                     })
                 }
             }
         }
-        is ViewportContent.Failed -> MapStatus(pointErrorLabel(content.error), MapViewEvent.RetryViewport, eventHandler)
+        is ViewportContent.Failed -> MapStatus(pointErrorLabel(content.error), MapViewEvent.OnRetryViewport, eventHandler)
     }
     val location = when (state.locationProblem) {
         DeviceLocationResult.Denied -> Res.string.map_location_denied

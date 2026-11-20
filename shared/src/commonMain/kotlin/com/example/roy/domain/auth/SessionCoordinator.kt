@@ -108,8 +108,10 @@ internal class SessionCoordinator(
                     status.value = SessionStatus.VerificationUnavailable
                     return@withLock
                 }
-                // The rotation path already committed the rotated snapshot.
-                val savedProfile = if (current !== saved) AuthResult.Success(current) else persist(current.withUser(result.value))
+                // Only successful server verification permits offline reads after an interrupted logout.
+                val verified = if (current !== saved) current else current.withUser(result.value)
+                val savedProfile = if (current !== saved && verified.isOfflineRestoreAllowed) AuthResult.Success(verified)
+                    else persist(verified.withOfflineRestoreAllowed(true))
                 if (savedProfile is AuthResult.Success) {
                     onAccountChanged(current.user.id)
                     status.value = SessionStatus.Active(scopeId)
@@ -120,7 +122,7 @@ internal class SessionCoordinator(
             }
             is AuthResult.Failure -> gate.withLock {
                 if (session != null) {
-                    if (allowOfflineRestore && result.error.code == AuthErrorCode.Network) {
+                    if (allowOfflineRestore && session?.isOfflineRestoreAllowed == true && result.error.code == AuthErrorCode.Network) {
                         requiresReconnectVerification = true
                         onAccountChanged(session?.user?.id)
                         status.value = SessionStatus.Active(scopeId)
@@ -248,9 +250,14 @@ internal class SessionCoordinator(
         verifyReconnectedSession()
         val closingScope = gate.withLock {
             if (expectedScopeId != null && status.value != SessionStatus.Active(expectedScopeId)) return expired()
-            if (session == null) return AuthResult.Success(Unit)
+            val current = session ?: return AuthResult.Success(Unit)
+            if (online && requiresReconnectVerification) return networkUnavailable()
+            // Persist intent before remote revocation; failed deletion must not resurrect an offline session.
+            if (current.isOfflineRestoreAllowed) {
+                val marked = persist(current.withOfflineRestoreAllowed(false))
+                if (marked is AuthResult.Failure) return marked
+            }
             if (!online) return endSession()
-            if (requiresReconnectVerification) return networkUnavailable()
             closing = true
             scopeId
         }
@@ -305,7 +312,8 @@ internal class SessionCoordinator(
                     if (scopeId != observedScope || current?.refreshToken != observed.refreshToken) return@withLock expired()
                     when (result) {
                         is AuthResult.Success -> {
-                            val rotated = if (current === observed) result.value else result.value.withUser(current.user)
+                            val refreshed = if (current === observed) result.value else result.value.withUser(current.user)
+                            val rotated = refreshed.withOfflineRestoreAllowed(current.isOfflineRestoreAllowed)
                             uncommitted = rotated
                             persist(rotated).also { if (it is AuthResult.Success) uncommitted = null }
                         }
@@ -357,23 +365,34 @@ internal class SessionCoordinator(
 
     private suspend fun endSession(expired: Boolean = false): AuthResult<Unit> = withContext(NonCancellable) {
         pendingClear = true
-        onAccountChanged(null)
+        // Terminal server revocation also needs a durable guard if record deletion fails.
+        session?.takeIf { it.isOfflineRestoreAllowed }?.let { persist(it.withOfflineRestoreAllowed(false)) }
         session = null
         readWave = ReadWave()
         uncommitted = null
         requiresReconnectVerification = false
         scopeId++
-        try {
-            store.clear()
-            onPrivateSessionEnded()
+        var cleanupFailed = false
+        suspend fun attempt(cleanup: suspend () -> Unit) {
+            try {
+                cleanup()
+            } catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                cleanupFailed = true
+            }
+        }
+        // Each private surface must be cleared even when another storage backend fails.
+        attempt { onAccountChanged(null) }
+        attempt { store.clear() }
+        attempt { onPrivateSessionEnded() }
+        if (cleanupFailed) {
+            status.value = SessionStatus.StorageUnavailable
+            storageFailure()
+        } else {
             pendingClear = false
             status.value = SessionStatus.Guest
             if (expired) expirationId.value++
             AuthResult.Success(Unit)
-        } catch (failure: Exception) {
-            if (failure is CancellationException) throw failure
-            status.value = SessionStatus.StorageUnavailable
-            storageFailure()
         }
     }
 
@@ -386,4 +405,8 @@ private fun AuthResult<*>.isTerminalAccess() = this is AuthResult.Failure &&
     (error.code == AuthErrorCode.SessionExpired || error.code == AuthErrorCode.AuthRequired)
 
 private fun AuthSession.withUser(user: AuthUser) =
-    AuthSession(accessToken, expiresAt, refreshToken, refreshExpiresAt, user)
+    AuthSession(accessToken, expiresAt, refreshToken, refreshExpiresAt, user, isOfflineRestoreAllowed)
+
+private fun AuthSession.withOfflineRestoreAllowed(allowed: Boolean) =
+    if (isOfflineRestoreAllowed == allowed) this
+    else AuthSession(accessToken, expiresAt, refreshToken, refreshExpiresAt, user, allowed)

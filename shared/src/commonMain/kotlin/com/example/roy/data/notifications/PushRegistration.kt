@@ -52,7 +52,7 @@ internal class PushRegistration(
                         put("provider", if (native.platform == "android") "rustore" else "apns")
                         put("token", token)
                     }.toString()
-                    val response = session.mutateProtected(scope) { access ->
+                    suspend fun register(access: String): AuthResult<Unit> {
                         val previous = native.hasRegistration
                         // Keep the marker if the outcome could have been committed before a response was lost.
                         native.updateRegistration(true)
@@ -62,7 +62,12 @@ internal class PushRegistration(
                                 (reply?.status == 503 && code == "PUSH_REGISTRATION_FAILED"))) {
                             native.updateRegistration(false)
                         }
-                        responseResult(reply?.status)
+                        return responseResult(reply?.status)
+                    }
+                    var response = session.mutateProtected(scope, ::register)
+                    // PUT is idempotent; retry only a rejected credential after the coordinator refreshes it.
+                    if (response is AuthResult.Failure && response.error.code == AuthErrorCode.AuthRequired) {
+                        response = session.mutateProtected(scope, ::register)
                     }
                     if (response is AuthResult.Success) {
                         registeredScope = scope

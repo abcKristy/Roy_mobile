@@ -6,9 +6,33 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.roy.presentation.components.overlays.RoyDialog
 import com.example.roy.presentation.core.CollectMviActions
 import org.jetbrains.compose.resources.stringResource
-import roy.shared.generated.resources.*
+import roy.shared.generated.resources.Res
+import roy.shared.generated.resources.feedback_retry
+import roy.shared.generated.resources.map_detail_loading
+import roy.shared.generated.resources.map_point_gone
+import roy.shared.generated.resources.point_detail_add
+import roy.shared.generated.resources.point_detail_cancel
+import roy.shared.generated.resources.point_detail_custom_label
+import roy.shared.generated.resources.point_detail_description
+import roy.shared.generated.resources.point_detail_duplicate
+import roy.shared.generated.resources.point_detail_empty
+import roy.shared.generated.resources.point_detail_existing
+import roy.shared.generated.resources.point_detail_invalid_topic
+import roy.shared.generated.resources.point_detail_join
+import roy.shared.generated.resources.point_detail_leave
+import roy.shared.generated.resources.point_detail_leave_body
+import roy.shared.generated.resources.point_detail_leave_title
+import roy.shared.generated.resources.point_detail_network
+import roy.shared.generated.resources.point_detail_people
+import roy.shared.generated.resources.point_detail_select_existing
+import roy.shared.generated.resources.point_detail_session
+import roy.shared.generated.resources.point_detail_to_map
+import roy.shared.generated.resources.protected_back
+import roy.shared.generated.resources.protected_open_chat
+import roy.shared.generated.resources.protected_unavailable
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -20,7 +44,7 @@ internal fun PointDetailScreen(
     onOpenChat: (pointId: String, topicId: String, chatId: String) -> Unit,
     onPointChanged: (pointId: String, isGone: Boolean) -> Unit,
 ) {
-    val state by viewModel.viewState.collectAsStateWithLifecycle()
+    val viewState by viewModel.viewState.collectAsStateWithLifecycle()
     val eventHandler = remember(viewModel) { viewModel::handleEvent }
     CollectMviActions(viewModel.viewAction) { action ->
         when (action) {
@@ -32,24 +56,38 @@ internal fun PointDetailScreen(
         }
     }
 
-    BackHandler(enabled = !state.isAddSheetOpen && !state.isLeaveDialogOpen) {
+    BackHandler(enabled = !viewState.isAddSheetOpen && !viewState.isLeaveDialogOpen) {
         eventHandler(PointDetailEvent.OnBack)
     }
-    PointDetailView(state, pointDetailStrings(state), eventHandler)
+    val strings = pointDetailStrings(viewState)
+    PointDetailView(viewState, strings, eventHandler)
+    if (viewState.isAddSheetOpen) AddTopicSheet(viewState, strings, eventHandler)
+    if (viewState.isLeaveDialogOpen) {
+        RoyDialog(
+            title = strings.leaveTitle,
+            body = strings.leaveBody,
+            confirmText = strings.leave,
+            cancelText = strings.cancel,
+            onConfirm = { eventHandler(PointDetailEvent.OnLeaveConfirmed) },
+            onCancel = { eventHandler(PointDetailEvent.OnDialogDismissed) },
+            isSubmitting = viewState.operation == PointDetailOperation.Leave,
+            isDestructive = true,
+        )
+    }
 }
 
 @Composable
-internal fun pointDetailStrings(state: PointDetailState) = PointDetailStrings(
+internal fun pointDetailStrings(viewState: PointDetailState) = PointDetailStrings(
     back = stringResource(Res.string.protected_back),
     map = stringResource(Res.string.point_detail_to_map),
     loading = stringResource(Res.string.map_detail_loading),
     gone = stringResource(Res.string.map_point_gone),
     empty = stringResource(Res.string.point_detail_empty),
-    totalPeople = state.point?.peopleCount?.let { stringResource(Res.string.point_detail_people, it) }.orEmpty(),
-    topicCounts = state.point?.topics.orEmpty().associate { topic ->
+    totalPeople = viewState.point?.peopleCount?.let { stringResource(Res.string.point_detail_people, it) }.orEmpty(),
+    topicCounts = viewState.point?.topics.orEmpty().associate { topic ->
         topic.id to stringResource(Res.string.point_detail_people, topic.participantCount)
     },
-    description = state.selectedTopic?.label?.let { stringResource(Res.string.point_detail_description, it) }.orEmpty(),
+    description = viewState.selectedTopic?.label?.let { stringResource(Res.string.point_detail_description, it) }.orEmpty(),
     join = stringResource(Res.string.point_detail_join),
     open = stringResource(Res.string.protected_open_chat),
     add = stringResource(Res.string.point_detail_add),
@@ -61,8 +99,8 @@ internal fun pointDetailStrings(state: PointDetailState) = PointDetailStrings(
     selectExisting = stringResource(Res.string.point_detail_select_existing),
     existing = stringResource(Res.string.point_detail_existing),
     customLabel = stringResource(Res.string.point_detail_custom_label),
-    error = state.error?.displayText(),
-    sheetError = state.sheetError?.displayText(),
+    error = viewState.error?.displayText(),
+    sheetError = viewState.sheetError?.displayText(),
 )
 
 @Composable

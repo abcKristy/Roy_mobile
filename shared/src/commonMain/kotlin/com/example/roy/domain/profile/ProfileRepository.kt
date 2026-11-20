@@ -35,10 +35,10 @@ internal sealed interface PickImageResult {
     data class Failure(val problem: ProfileProblem) : PickImageResult
 }
 
-internal const val MaxProfileAvatarBytes = 5 * 1024 * 1024
+internal const val MAX_PROFILE_AVATAR_BYTES = 5 * 1024 * 1024
 
 internal fun PickImageResult.Selected.validationError(): ProfileProblem? = when {
-    bytes.size > MaxProfileAvatarBytes -> ProfileProblem.TooLarge
+    bytes.size > MAX_PROFILE_AVATAR_BYTES -> ProfileProblem.TooLarge
     bytes.isEmpty() || mimeType !in setOf("image/jpeg", "image/png") -> ProfileProblem.InvalidImage
     else -> null
 }

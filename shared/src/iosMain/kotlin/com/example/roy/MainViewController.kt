@@ -5,6 +5,7 @@ import com.example.roy.data.auth.AuthRemoteDataSource
 import com.example.roy.data.filters.FilterPreferencesStore
 import com.example.roy.data.chat.chatConnectivity
 import platform.Foundation.NSUserDefaults
+import platform.UIKit.UIViewController
 import com.example.roy.data.auth.IosAuthHttpTransport
 import com.example.roy.data.auth.IosSessionStore
 import com.example.roy.domain.auth.SessionCoordinator
@@ -19,7 +20,7 @@ import com.example.roy.data.offline.iosOfflineCache
 import com.example.roy.push.IosPush
 import androidx.compose.runtime.remember
 
-fun MainViewController(apiOrigin: String?) = ComposeUIViewController {
+fun MainViewController(apiOrigin: String?): UIViewController = ComposeUIViewController {
     val origin = apiOrigin ?: "https://roy.invalid"
     val transport = remember { IosAuthHttpTransport() }
     val points = remember(origin) { PointRemoteDataSource(origin, transport) }
@@ -31,6 +32,7 @@ fun MainViewController(apiOrigin: String?) = ComposeUIViewController {
             IosSessionStore(),
             onPrivateSessionEnded = { cache.clearPrivate() },
             allowOfflineRestore = true,
+            onAccountChanged = { IosPush.runtime.updateAccount(it) },
         )
     }
     val continuation = remember(session) { AuthReturnCoordinator() }

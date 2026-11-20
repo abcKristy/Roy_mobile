@@ -16,10 +16,6 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.rememberNavController
-import androidx.navigation.NavDestination.Companion.hasRoute
 import com.example.roy.domain.auth.AuthErrorCode
 import com.example.roy.domain.auth.AuthField
 import com.example.roy.domain.auth.AuthFieldError
@@ -28,39 +24,29 @@ import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.ValidateAuthInput
 import com.example.roy.presentation.components.TertiaryButton
 import com.example.roy.presentation.core.CollectMviActions
-import com.example.roy.presentation.navigation.RoyRoute
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
-import roy.shared.generated.resources.*
-
-@Composable
-internal fun AuthNavHost(
-    session: SessionCoordinator,
-    onCancel: (() -> Unit)? = null,
-    onSucceeded: () -> Unit = {},
-) {
-    val nav = rememberNavController()
-    NavHost(nav, startDestination = RoyRoute.Login) {
-        composable<RoyRoute.Login> {
-            AuthScreen(AuthMode.Login, session, onCancel, onSucceeded) {
-                if (nav.currentDestination?.hasRoute<RoyRoute.Login>() == true) {
-                    nav.navigate(RoyRoute.Register) { launchSingleTop = true }
-                }
-            }
-        }
-        composable<RoyRoute.Register> {
-            AuthScreen(AuthMode.Register, session, onCancel, onSucceeded) {
-                if (nav.currentDestination?.hasRoute<RoyRoute.Register>() == true) {
-                    nav.popBackStack<RoyRoute.Login>(inclusive = false)
-                }
-            }
-        }
-    }
-}
+import roy.shared.generated.resources.Res
+import roy.shared.generated.resources.auth_consent
+import roy.shared.generated.resources.auth_duplicate_phone
+import roy.shared.generated.resources.auth_invalid_age
+import roy.shared.generated.resources.auth_invalid_credentials
+import roy.shared.generated.resources.auth_invalid_field
+import roy.shared.generated.resources.auth_invalid_phone
+import roy.shared.generated.resources.auth_name_length
+import roy.shared.generated.resources.auth_network
+import roy.shared.generated.resources.auth_password_length
+import roy.shared.generated.resources.auth_password_required
+import roy.shared.generated.resources.auth_policy_changed
+import roy.shared.generated.resources.auth_policy_open_error
+import roy.shared.generated.resources.auth_rate_limited
+import roy.shared.generated.resources.auth_storage_failed
+import roy.shared.generated.resources.auth_unavailable
+import roy.shared.generated.resources.protected_cancel
 
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
-private fun AuthScreen(
+internal fun AuthScreen(
     mode: AuthMode,
     session: SessionCoordinator,
     onCancel: (() -> Unit)?,
@@ -68,9 +54,9 @@ private fun AuthScreen(
     onSwitchMode: () -> Unit,
 ) {
     val model = viewModel { AuthViewModel(mode, session, ValidateAuthInput()) }
-    val state by model.viewState.collectAsStateWithLifecycle()
-    if (onCancel != null) BackHandler(enabled = !state.submitting, onBack = onCancel)
-    SuppressBackWhileSubmitting(state.submitting)
+    val viewState by model.viewState.collectAsStateWithLifecycle()
+    if (onCancel != null) BackHandler(enabled = !viewState.isSubmitting, onBack = onCancel)
+    SuppressBackWhileSubmitting(viewState.isSubmitting)
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     var modeSwitchRequested by remember { mutableStateOf(false) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { modeSwitchRequested = false }
@@ -78,17 +64,17 @@ private fun AuthScreen(
     var policyOpenFailed by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     val eventHandler: (AuthViewEvent) -> Unit = handleEvent@{ event ->
-        if (event == AuthViewEvent.SwitchMode) {
-            if (modeSwitchRequested || model.viewState.value.submitting ||
+        if (event == AuthViewEvent.OnSwitchMode) {
+            if (modeSwitchRequested || model.viewState.value.isSubmitting ||
                 lifecycle.currentState != Lifecycle.State.RESUMED
             ) return@handleEvent
             // The outgoing destination can still receive taps while its navigation action is queued.
             modeSwitchRequested = true
         }
-        if (event is AuthViewEvent.PasswordChanged && !model.viewState.value.submitting) password = event.value
-        if (event is AuthViewEvent.Submit || event == AuthViewEvent.RetryPolicy) policyOpenFailed = false
+        if (event is AuthViewEvent.OnPasswordChanged && !model.viewState.value.isSubmitting) password = event.value
+        if (event is AuthViewEvent.OnSubmit || event == AuthViewEvent.OnRetryPolicy) policyOpenFailed = false
         model.handleEvent(event)
-        if (event is AuthViewEvent.Submit && model.viewState.value.submitting) password = ""
+        if (event is AuthViewEvent.OnSubmit && model.viewState.value.isSubmitting) password = ""
     }
 
     CollectMviActions(model.viewAction) { action ->
@@ -110,12 +96,12 @@ private fun AuthScreen(
     }
 
     val errors = mutableMapOf<AuthField, String>()
-    for ((field, error) in state.fieldErrors) {
+    for ((field, error) in viewState.fieldErrors) {
         errors[field] = stringResource(error.resource())
     }
-    val remoteField = state.remoteFieldError
+    val remoteField = viewState.remoteFieldError
     if (remoteField != null) {
-        val resource = if (state.formError == AuthErrorCode.DuplicatePhone) {
+        val resource = if (viewState.formError == AuthErrorCode.DuplicatePhone) {
             Res.string.auth_duplicate_phone
         } else {
             Res.string.auth_invalid_field
@@ -124,19 +110,19 @@ private fun AuthScreen(
     }
     val formError = when {
         policyOpenFailed -> stringResource(Res.string.auth_policy_open_error)
-        state.remoteFieldError != null -> null
-        else -> state.formError?.let { stringResource(it.resource()) }
+        viewState.remoteFieldError != null -> null
+        else -> viewState.formError?.let { stringResource(it.resource()) }
     }
     if (onCancel == null) {
-        AuthView(state, errors, formError, password, eventHandler)
+        AuthView(viewState, errors, formError, password, eventHandler)
     } else {
         Column(Modifier.fillMaxSize()) {
             TertiaryButton(
                 label = stringResource(Res.string.protected_cancel),
                 onClick = onCancel,
-                isEnabled = !state.submitting,
+                isEnabled = !viewState.isSubmitting,
             )
-            AuthView(state, errors, formError, password, eventHandler)
+            AuthView(viewState, errors, formError, password, eventHandler)
         }
     }
 }
@@ -144,8 +130,8 @@ private fun AuthScreen(
 @Suppress("DEPRECATION")
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun SuppressBackWhileSubmitting(submitting: Boolean) {
-    BackHandler(enabled = submitting) { /* Keep ownership of the request until persistence finishes. */ }
+private fun SuppressBackWhileSubmitting(isSubmitting: Boolean) {
+    BackHandler(enabled = isSubmitting) { /* Keep ownership of the request until persistence finishes. */ }
 }
 
 private fun AuthFieldError.resource(): StringResource = when (this) {

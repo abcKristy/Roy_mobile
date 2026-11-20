@@ -121,10 +121,10 @@ class TopicChatReconciliationTest {
         val connectivity = MutableStateFlow(true)
         val model = ChatReportViewModel(ChatReportTarget("author", "Автор"), "chat", scope, session, UnusedWriter, connectivity)
         try {
-            model.handleEvent(ChatReportEvent.Edit("Причина жалобы"))
+            model.handleEvent(ChatReportEvent.OnEdit("Причина жалобы"))
             connectivity.value = false
             runCurrent()
-            model.handleEvent(ChatReportEvent.Submit)
+            model.handleEvent(ChatReportEvent.OnSubmit)
             runCurrent()
             assertFalse(model.viewState.value.canSubmit)
             assertFalse(model.viewState.value.isSubmitting)

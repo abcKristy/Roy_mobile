@@ -57,7 +57,7 @@ internal class PointDetailOperations(
 
 internal fun Point.findTopic(input: PointTopicInput): PointTopic? = topics.find { topic ->
     topic.presetKey == input.presetKey && (
-        topic.presetKey != OtherTopicKey ||
+        topic.presetKey != OTHER_TOPIC_KEY ||
             topic.label.trim().topicComparisonKey() == input.customLabel?.trim()?.topicComparisonKey()
         )
 }

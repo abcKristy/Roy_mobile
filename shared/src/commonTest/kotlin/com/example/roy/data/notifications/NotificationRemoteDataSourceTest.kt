@@ -25,7 +25,7 @@ class NotificationRemoteDataSourceTest {
         var request: AuthHttpRequest? = null
         val repository = NotificationRemoteDataSource("https://roy.test", AuthHttpTransport {
             request = it
-            AuthHttpResponse(409, """{"error":{"code":"STALE_STATE","details":$settingsBody}}""")
+            AuthHttpResponse(409, """{"error":{"code":"STALE_STATE","details":$SETTINGS_BODY}}""")
         })
         val result = assertIs<AuthResult.Success<NotificationSettingsWrite>>(
             repository.update(NotificationSettings(true, false, true, false, 2), "access"),
@@ -46,8 +46,8 @@ class NotificationRemoteDataSourceTest {
             assertEquals("https://roy.test/api/v1/me/notifications?limit=30&cursor=a%2Bb%26c%3D", it.url)
             AuthHttpResponse(
                 200,
-                """{"items":[{"id":"$notice","kind":"nearby_meeting","title":"Встреча рядом","body":"",
-                   "target":{"pointId":"$point","chatId":null,"proposalId":null},
+                """{"items":[{"id":"$NOTICE","kind":"nearby_meeting","title":"Встреча рядом","body":"",
+                   "target":{"pointId":"$POINT","chatId":null,"proposalId":null},
                    "createdAt":"2026-11-15T12:00:00Z","readAt":null}],"nextCursor":"next"}""",
             )
         })
@@ -56,24 +56,24 @@ class NotificationRemoteDataSourceTest {
         assertEquals("next", page.nextCursor)
         val target = assertNotNull(page.items.single().target)
         assertEquals(NotificationKind.NearbyMeeting, target.kind)
-        assertEquals(point, target.pointId)
+        assertEquals(POINT, target.pointId)
         assertNull(target.chatId)
     }
 
     @Test
     fun pushParserRequiresVersionAndRejectsNearbyPrivateIdentifiers() {
-        assertNull(NotificationTarget.fromPush("2", "reminder_1h", notice, point, notice, notice))
-        assertNull(NotificationTarget.fromPush("1", "nearby_meeting", notice, point, notice, null))
-        assertNull(NotificationTarget.fromPush("1", "reminder_1h", notice, point, notice, null))
-        val reminder = assertNotNull(NotificationTarget.fromPush("1", "reminder_1h", notice, point, notice, point))
+        assertNull(NotificationTarget.fromPush("2", "reminder_1h", NOTICE, POINT, NOTICE, NOTICE))
+        assertNull(NotificationTarget.fromPush("1", "nearby_meeting", NOTICE, POINT, NOTICE, null))
+        assertNull(NotificationTarget.fromPush("1", "reminder_1h", NOTICE, POINT, NOTICE, null))
+        val reminder = assertNotNull(NotificationTarget.fromPush("1", "reminder_1h", NOTICE, POINT, NOTICE, POINT))
         assertEquals(NotificationKind.Reminder, reminder.kind)
-        assertEquals(notice, reminder.notificationId)
+        assertEquals(NOTICE, reminder.notificationId)
     }
 
     private companion object {
-        const val notice = "f1746fb6-6d93-402e-b3f6-291723e70801"
-        const val point = "a5fd114d-21cb-44aa-9818-278aaf4a02af"
-        const val settingsBody = """{"remindersPushEnabled":true,"personalPushEnabled":true,
+        const val NOTICE = "f1746fb6-6d93-402e-b3f6-291723e70801"
+        const val POINT = "a5fd114d-21cb-44aa-9818-278aaf4a02af"
+        const val SETTINGS_BODY = """{"remindersPushEnabled":true,"personalPushEnabled":true,
             "extraPushEnabled":false,"extraInAppEnabled":false,"revision":3}"""
     }
 }

@@ -4,7 +4,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.roy.domain.auth.AuthErrorCode
 import com.example.roy.domain.auth.AuthResult
 import com.example.roy.domain.auth.AuthUser
-import com.example.roy.domain.auth.PrivacyPolicy
 import com.example.roy.domain.auth.SessionCoordinator
 import com.example.roy.domain.auth.SessionStatus
 import com.example.roy.domain.profile.PickImageResult
@@ -21,60 +20,6 @@ import kotlinx.coroutines.launch
 internal enum class ProfileOperation { Load, Name, Avatar, Password, Logout, Deletion }
 internal enum class ProfileDialog { AvatarRemoval, Logout, Deletion }
 internal enum class ProfileNotice { NameSaved, AvatarSaved, AvatarRemoved, DeletionCheckAvailable }
-
-internal data class ProfileViewState(
-    val user: AuthUser? = null,
-    val nameDraft: String = "",
-    val currentPassword: String = "",
-    val newPassword: String = "",
-    val deletionPassword: String = "",
-    val avatar: ProfileAvatar.Image? = null,
-    val policy: PrivacyPolicy? = null,
-    val operation: ProfileOperation? = null,
-    val dialog: ProfileDialog? = null,
-    val error: ProfileProblem? = null,
-    val failedOperation: ProfileOperation? = null,
-    val notice: ProfileNotice? = null,
-    val isPickerPending: Boolean = false,
-    val isOnline: Boolean = true,
-    val hasAvatar: Boolean = false,
-    val isDeletionUncertain: Boolean = false,
-    val isCached: Boolean = false,
-) {
-    val canEdit get() = user != null && operation == null && !isPickerPending && !isDeletionUncertain
-    val canSubmit get() = canEdit && isOnline && !isCached
-    val canSaveName get() = canSubmit && nameDraft.trim() != user?.displayName && nameDraft.trim().validSize(1..80)
-    val isNameInvalid get() = user != null && nameDraft != user.displayName && !nameDraft.trim().validSize(1..80)
-    val canChangePassword get() = canSubmit && currentPassword.isNotEmpty() && newPassword.validSize(8..128)
-    val canDelete get() = canSubmit && deletionPassword.length in 1..1024
-
-    override fun toString() = "ProfileViewState(redacted)"
-}
-
-internal sealed class ProfileViewEvent {
-    data object Load : ProfileViewEvent()
-    data object ScreenClosed : ProfileViewEvent()
-    data class NameChanged(val value: String) : ProfileViewEvent()
-    data object SaveName : ProfileViewEvent()
-    data object PickAvatarRequested : ProfileViewEvent()
-    data class AvatarPicked(val result: PickImageResult) : ProfileViewEvent()
-    data object DeleteAvatarRequested : ProfileViewEvent()
-    class CurrentPasswordChanged(val value: String) : ProfileViewEvent()
-    class NewPasswordChanged(val value: String) : ProfileViewEvent()
-    class DeletionPasswordChanged(val value: String) : ProfileViewEvent()
-    data object ChangePasswordSubmitted : ProfileViewEvent()
-    data object LogoutRequested : ProfileViewEvent()
-    data object DeleteAccountRequested : ProfileViewEvent()
-    data object DialogConfirmed : ProfileViewEvent()
-    data object DialogDismissed : ProfileViewEvent()
-    data object CheckDeletion : ProfileViewEvent()
-    data object OpenPolicy : ProfileViewEvent()
-}
-
-internal sealed class ProfileViewAction {
-    data object OpenImagePicker : ProfileViewAction()
-    data class OpenPublishedPolicy(val url: String) : ProfileViewAction()
-}
 
 internal class ProfileViewModel(
     private val scopeId: Long,
@@ -96,7 +41,7 @@ internal class ProfileViewModel(
                 updateState { it.copy(isOnline = online, isCached = it.isCached || (!online && it.user != null)) }
                 if (online && !wasOnline) {
                     reloadAfterReconnect = true
-                    load()
+                    onLoad()
                 }
             }
         }
@@ -104,35 +49,106 @@ internal class ProfileViewModel(
 
     override fun handleEvent(event: ProfileViewEvent) {
         if (!isCurrent) return
-        val state = viewState.value
         when (event) {
-            ProfileViewEvent.Load -> load()
-            ProfileViewEvent.ScreenClosed -> updateState {
-                it.copy(currentPassword = "", newPassword = "", deletionPassword = "", isPickerPending = false)
-            }
-            is ProfileViewEvent.NameChanged -> edit(ProfileOperation.Name) { it.copy(nameDraft = event.value) }
-            ProfileViewEvent.SaveName -> saveName()
-            ProfileViewEvent.PickAvatarRequested -> pickAvatar()
-            is ProfileViewEvent.AvatarPicked -> onAvatarPicked(event.result)
-            ProfileViewEvent.DeleteAvatarRequested -> openDialog(ProfileDialog.AvatarRemoval)
-            is ProfileViewEvent.CurrentPasswordChanged -> edit(ProfileOperation.Password) { it.copy(currentPassword = event.value) }
-            is ProfileViewEvent.NewPasswordChanged -> edit(ProfileOperation.Password) { it.copy(newPassword = event.value) }
-            is ProfileViewEvent.DeletionPasswordChanged -> edit(ProfileOperation.Deletion) { it.copy(deletionPassword = event.value) }
-            ProfileViewEvent.ChangePasswordSubmitted -> changePassword()
-            ProfileViewEvent.LogoutRequested -> openDialog(ProfileDialog.Logout)
-            ProfileViewEvent.DeleteAccountRequested -> openDialog(ProfileDialog.Deletion)
-            ProfileViewEvent.DialogConfirmed -> confirmDialog()
-            ProfileViewEvent.DialogDismissed -> if (state.operation == null) {
-                updateState { it.copy(dialog = null, deletionPassword = "", error = null, failedOperation = null) }
-            }
-            ProfileViewEvent.CheckDeletion -> checkDeletion()
-            ProfileViewEvent.OpenPolicy -> state.policy?.let { policy ->
-                viewModelScope.launch { sendAction(ProfileViewAction.OpenPublishedPolicy(policy.url)) }
-            }
+            ProfileViewEvent.OnNotificationsRequested -> onNotificationsRequested()
+            ProfileViewEvent.OnNotificationSettingsRequested -> onNotificationSettingsRequested()
+            ProfileViewEvent.OnLoad -> onLoad()
+            ProfileViewEvent.OnScreenClosed -> onScreenClosed()
+            is ProfileViewEvent.OnNameChanged -> onNameChanged(event)
+            ProfileViewEvent.OnSaveName -> onSaveName()
+            ProfileViewEvent.OnPickAvatarRequested -> onPickAvatarRequested()
+            is ProfileViewEvent.OnAvatarPicked -> onAvatarPicked(event.result)
+            ProfileViewEvent.OnDeleteAvatarRequested -> onDeleteAvatarRequested()
+            is ProfileViewEvent.OnCurrentPasswordChanged -> onCurrentPasswordChanged(event)
+            is ProfileViewEvent.OnNewPasswordChanged -> onNewPasswordChanged(event)
+            is ProfileViewEvent.OnDeletionPasswordChanged -> onDeletionPasswordChanged(event)
+            ProfileViewEvent.OnChangePasswordSubmitted -> onChangePasswordSubmitted()
+            ProfileViewEvent.OnLogoutRequested -> onLogoutRequested()
+            ProfileViewEvent.OnDeleteAccountRequested -> onDeleteAccountRequested()
+            ProfileViewEvent.OnDialogConfirmed -> onDialogConfirmed()
+            ProfileViewEvent.OnDialogDismissed -> onDialogDismissed()
+            ProfileViewEvent.OnCheckDeletion -> onCheckDeletion()
+            ProfileViewEvent.OnOpenPolicy -> onOpenPolicy()
         }
     }
 
-    private fun load() {
+    private fun onNotificationsRequested() {
+        openNotifications()
+    }
+
+    private fun onNotificationSettingsRequested() {
+        openNotificationSettings()
+    }
+
+    private fun onScreenClosed() {
+        updateState {
+            it.copy(currentPassword = "", newPassword = "", deletionPassword = "", isPickerPending = false)
+        }
+    }
+
+    private fun onNameChanged(event: ProfileViewEvent.OnNameChanged) {
+        edit(ProfileOperation.Name) { it.copy(nameDraft = event.value) }
+    }
+
+    private fun onPickAvatarRequested() {
+        pickAvatar()
+    }
+
+    private fun onDeleteAvatarRequested() {
+        openDialog(ProfileDialog.AvatarRemoval)
+    }
+
+    private fun onCurrentPasswordChanged(event: ProfileViewEvent.OnCurrentPasswordChanged) {
+        edit(ProfileOperation.Password) { it.copy(currentPassword = event.value) }
+    }
+
+    private fun onNewPasswordChanged(event: ProfileViewEvent.OnNewPasswordChanged) {
+        edit(ProfileOperation.Password) { it.copy(newPassword = event.value) }
+    }
+
+    private fun onDeletionPasswordChanged(event: ProfileViewEvent.OnDeletionPasswordChanged) {
+        edit(ProfileOperation.Deletion) { it.copy(deletionPassword = event.value) }
+    }
+
+    private fun onChangePasswordSubmitted() {
+        changePassword()
+    }
+
+    private fun onLogoutRequested() {
+        openDialog(ProfileDialog.Logout)
+    }
+
+    private fun onDeleteAccountRequested() {
+        openDialog(ProfileDialog.Deletion)
+    }
+
+    private fun onDialogConfirmed() {
+        confirmDialog()
+    }
+
+    private fun onDialogDismissed() {
+        val state = viewState.value
+        if (state.operation == null) {
+            updateState { it.copy(dialog = null, deletionPassword = "", error = null, failedOperation = null) }
+        }
+    }
+
+    private fun onOpenPolicy() {
+        val state = viewState.value
+        state.policy?.let { policy ->
+            viewModelScope.launch { sendAction(ProfileViewAction.OpenPublishedPolicy(policy.url)) }
+        }
+    }
+
+    private fun openNotifications() {
+        viewModelScope.launch { sendAction(ProfileViewAction.OpenNotifications) }
+    }
+
+    private fun openNotificationSettings() {
+        viewModelScope.launch { sendAction(ProfileViewAction.OpenNotificationSettings) }
+    }
+
+    private fun onLoad() {
         val state = viewState.value
         if (!isCurrent || state.operation != null) return
         reloadAfterReconnect = false
@@ -187,7 +203,7 @@ internal class ProfileViewModel(
         }
     }
 
-    private fun saveName() {
+    private fun onSaveName() {
         val state = viewState.value
         if (!state.canSaveName) return
         runOperation(ProfileOperation.Name) {
@@ -302,7 +318,7 @@ internal class ProfileViewModel(
         }
     }
 
-    private fun checkDeletion() {
+    private fun onCheckDeletion() {
         if (!viewState.value.isDeletionUncertain || !viewState.value.isOnline) return
         runOperation(ProfileOperation.Deletion) {
             val result = session.readProtected(scopeId, repository::getProfile)
@@ -330,7 +346,7 @@ internal class ProfileViewModel(
             } finally {
                 if (isCurrent) {
                     updateState { it.copy(operation = null) }
-                    if (reloadAfterReconnect && viewState.value.isOnline) load()
+                    if (reloadAfterReconnect && viewState.value.isOnline) onLoad()
                 }
             }
         }
@@ -353,7 +369,7 @@ internal class ProfileViewModel(
     }
 }
 
-private fun String.validSize(range: IntRange): Boolean {
+internal fun String.validSize(range: IntRange): Boolean {
     if (length > range.last * 2) return false
     var index = 0
     var codePoints = 0

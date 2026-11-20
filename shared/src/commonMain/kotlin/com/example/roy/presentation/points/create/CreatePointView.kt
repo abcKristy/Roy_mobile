@@ -32,7 +32,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.roy.domain.points.OtherTopicKey
+import com.example.roy.domain.points.OTHER_TOPIC_KEY
 import com.example.roy.presentation.components.PrimaryButton
 import com.example.roy.presentation.components.SecondaryButton
 import com.example.roy.presentation.components.TertiaryButton
@@ -162,17 +162,17 @@ private fun TopicOptions(
             ) {
                 val selected = state.draft.topic
                 for (preset in state.presets) {
-                    if (preset.key == OtherTopicKey) continue
+                    if (preset.key == OTHER_TOPIC_KEY) continue
                     CreateTopicOption(preset.label, selected?.presetKey == preset.key, isEditable) {
                         eventHandler(CreatePointViewEvent.OnSelectPreset(preset.key))
                     }
                 }
-                val isCustomTopic = selected?.presetKey == OtherTopicKey
+                val isCustomTopic = selected?.presetKey == OTHER_TOPIC_KEY
                 CreateTopicOption(
                     label = if (isCustomTopic) selected?.customLabel ?: text.other else text.other,
                     isSelected = isCustomTopic,
                     isEnabled = isEditable,
-                ) { eventHandler(CreatePointViewEvent.OnSelectPreset(OtherTopicKey)) }
+                ) { eventHandler(CreatePointViewEvent.OnSelectPreset(OTHER_TOPIC_KEY)) }
             }
         }
         text.topicError?.let { CreatePointError(it) }

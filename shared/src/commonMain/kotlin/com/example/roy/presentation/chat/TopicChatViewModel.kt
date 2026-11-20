@@ -106,10 +106,7 @@ internal class TopicChatViewModel(
             TopicChatViewEvent.OnSearchSubmitted -> onSearchSubmitted()
             TopicChatViewEvent.OnSearchMore -> onSearchMore()
             is TopicChatViewEvent.OnVisibleMessage -> onVisibleMessage(event.seq)
-            is TopicChatViewEvent.OnMeetingOverlayChanged -> {
-                isMeetingOverlayOpen = event.isOpen
-                if (event.isOpen) stopRead()
-            }
+            is TopicChatViewEvent.OnMeetingOverlayChanged -> onMeetingOverlayChanged(event)
             TopicChatViewEvent.OnLeaveRequested -> onLeaveRequested()
             TopicChatViewEvent.OnLeaveConfirmed -> onLeaveConfirmed()
             TopicChatViewEvent.OnLeaveDismissed -> onLeaveDismissed()
@@ -118,6 +115,11 @@ internal class TopicChatViewModel(
             is TopicChatViewEvent.OnReportRequested -> onReportRequested(event.messageId)
             TopicChatViewEvent.OnReportDismissed -> onReportDismissed()
         }
+    }
+
+    private fun onMeetingOverlayChanged(event: TopicChatViewEvent.OnMeetingOverlayChanged) {
+        isMeetingOverlayOpen = event.isOpen
+        if (event.isOpen) stopRead()
     }
 
     private fun scopeIsCurrent(): Boolean = sessions.state.value == SessionStatus.Active(scopeId)

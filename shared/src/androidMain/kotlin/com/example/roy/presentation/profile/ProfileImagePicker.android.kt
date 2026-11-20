@@ -7,7 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
-import com.example.roy.domain.profile.MaxProfileAvatarBytes
+import com.example.roy.domain.profile.MAX_PROFILE_AVATAR_BYTES
 import com.example.roy.domain.profile.PickImageResult
 import com.example.roy.domain.profile.ProfileProblem
 import java.io.ByteArrayOutputStream
@@ -33,7 +33,7 @@ internal actual fun rememberProfileImagePicker(onResult: (PickImageResult) -> Un
                         while (true) {
                             val count = source.read(chunk)
                             if (count <= 0) break
-                            if (output.size() + count > MaxProfileAvatarBytes) {
+                            if (output.size() + count > MAX_PROFILE_AVATAR_BYTES) {
                                 return@use PickImageResult.Failure(ProfileProblem.TooLarge)
                             }
                             output.write(chunk, 0, count)
