@@ -44,7 +44,8 @@ fun RoyAndroidApp(
         val repository = AuthRemoteDataSource(apiOrigin, transport)
         val cache = androidOfflineCache(context.applicationContext)
         val session = SessionCoordinator(repository, AndroidSessionStore(context.applicationContext),
-            onPrivateSessionEnded = { cache.clearPrivate() }, allowOfflineRestore = true)
+            onPrivateSessionEnded = { cache.clearPrivate() }, allowOfflineRestore = true,
+            onAccountChanged = { pushRuntime?.updateAccount(it) })
         val points = PointRemoteDataSource(apiOrigin, transport)
         val createPoints = CreatePointRemoteDataSource(apiOrigin, transport)
         val preferences = context.applicationContext.getSharedPreferences("roy_map", Context.MODE_PRIVATE)

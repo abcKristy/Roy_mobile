@@ -25,6 +25,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".NotificationTapActivity" android:exported="false" android:noHistory="true" />
         <service android:name=".RoyRuStoreService" android:exported="true">
             <intent-filter>
                 <action android:name="ru.rustore.sdk.pushclient.MESSAGING_EVENT" />

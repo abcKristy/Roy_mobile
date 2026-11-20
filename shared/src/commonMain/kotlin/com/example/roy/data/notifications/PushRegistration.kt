@@ -3,6 +3,8 @@ package com.example.roy.data.notifications
 import com.example.roy.data.auth.AuthHttpMethod
 import com.example.roy.data.auth.AuthHttpRequest
 import com.example.roy.data.auth.AuthHttpTransport
+import com.example.roy.data.auth.AuthJson
+import com.example.roy.data.auth.ErrorEnvelopeDto
 import com.example.roy.domain.auth.AuthError
 import com.example.roy.domain.auth.AuthErrorCode
 import com.example.roy.domain.auth.AuthResult
@@ -40,17 +42,28 @@ internal class PushRegistration(
             gate.withLock {
                 if (blockedScope == scope || session.state.value != SessionStatus.Active(scope)) return@withLock
                 val token = update.token
-                if (update.permission != PushAuthorization.Allowed || token == null) {
-                    if (registeredScope == scope) revoke(scope)
-                } else if (registeredScope != scope || token != registeredToken) {
+                if (update.permission == PushAuthorization.Denied) {
+                    if (native.hasRegistration) revoke(scope)
+                } else if (update.permission == PushAuthorization.Allowed && token != null &&
+                    (registeredScope != scope || token != registeredToken)
+                ) {
                     val body = buildJsonObject {
                         put("platform", native.platform)
                         put("provider", if (native.platform == "android") "rustore" else "apns")
                         put("token", token)
                     }.toString()
-                    // A lost response may still leave an installation bound on the server.
-                    native.updateRegistration(true)
-                    val response = session.mutateProtected(scope) { request(AuthHttpMethod.Put, body, it) }
+                    val response = session.mutateProtected(scope) { access ->
+                        val previous = native.hasRegistration
+                        // Keep the marker if the outcome could have been committed before a response was lost.
+                        native.updateRegistration(true)
+                        val reply = transport.execute(AuthHttpRequest(AuthHttpMethod.Put, endpoint, body, access))
+                        val code = reply?.let { runCatching { AuthJson.decodeFromString<ErrorEnvelopeDto>(it.body).error.code }.getOrNull() }
+                        if (!previous && (reply?.status in setOf(400, 401, 403, 409, 422) ||
+                                (reply?.status == 503 && code == "PUSH_REGISTRATION_FAILED"))) {
+                            native.updateRegistration(false)
+                        }
+                        responseResult(reply?.status)
+                    }
                     if (response is AuthResult.Success) {
                         registeredScope = scope
                         registeredToken = token
@@ -67,10 +80,10 @@ internal class PushRegistration(
         blockedScope = scope
         try {
             if (native.hasRegistration) {
-                val revoked = revoke(scope)
+                val revoked = revoke(scope, allowMissingEndpoint = true)
                 if (revoked is AuthResult.Failure) return@withLock revoked
             }
-            session.logout()
+            session.logout(scope)
         } finally {
             if (session.state.value == SessionStatus.Active(scope)) {
                 blockedScope = null
@@ -79,28 +92,35 @@ internal class PushRegistration(
         }
     }
 
-    private suspend fun revoke(scope: Long): AuthResult<Unit> {
-        var result = session.mutateProtected(scope) { request(AuthHttpMethod.Delete, null, it) }
+    private suspend fun revoke(scope: Long, allowMissingEndpoint: Boolean = false): AuthResult<Unit> {
+        var endpointMissing = false
+        suspend fun delete(access: String): AuthResult<Unit> {
+            val status = transport.execute(AuthHttpRequest(AuthHttpMethod.Delete, endpoint, null, access))?.status
+            endpointMissing = status == 404
+            return responseResult(status)
+        }
+        var result = session.mutateProtected(scope, ::delete)
         // A rejected credential may have been refreshed. Revoking this installation is idempotent.
         if (result is AuthResult.Failure && result.error.code == AuthErrorCode.AuthRequired) {
-            result = session.mutateProtected(scope) { request(AuthHttpMethod.Delete, null, it) }
+            result = session.mutateProtected(scope, ::delete)
         }
         if (result is AuthResult.Success) {
             native.updateRegistration(false)
             registeredScope = null
             registeredToken = null
         }
-        return result
+        // When device registration is disabled, Ktor does not install the DELETE route.
+        // Keep the persisted marker so a subsequent session can reconcile it if the route returns.
+        return if (allowMissingEndpoint && endpointMissing && result is AuthResult.Failure &&
+            result.error.code == AuthErrorCode.ServiceUnavailable
+        ) AuthResult.Success(Unit) else result
     }
 
-    private suspend fun request(method: AuthHttpMethod, body: String?, access: String): AuthResult<Unit> {
-        val response = transport.execute(AuthHttpRequest(method, endpoint, body, access))
-        return when (response?.status) {
-            200, 204 -> AuthResult.Success(Unit)
-            401 -> AuthResult.Failure(AuthError(AuthErrorCode.AuthRequired))
-            null -> AuthResult.Failure(AuthError(AuthErrorCode.Network))
-            else -> AuthResult.Failure(AuthError(AuthErrorCode.ServiceUnavailable))
-        }
+    private fun responseResult(status: Int?): AuthResult<Unit> = when (status) {
+        200, 204 -> AuthResult.Success(Unit)
+        401 -> AuthResult.Failure(AuthError(AuthErrorCode.AuthRequired))
+        null -> AuthResult.Failure(AuthError(AuthErrorCode.Network))
+        else -> AuthResult.Failure(AuthError(AuthErrorCode.ServiceUnavailable))
     }
 
     private class Registration(

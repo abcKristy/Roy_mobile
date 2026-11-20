@@ -2,6 +2,8 @@ package com.example.roy.presentation.map
 
 import com.example.roy.domain.location.DeviceLocation
 import com.example.roy.domain.location.DeviceLocationResult
+import com.example.roy.data.offline.OfflineCache
+import com.example.roy.data.offline.OfflineRecord
 import com.example.roy.domain.map.BoundingBox
 import com.example.roy.domain.map.LoadPoint
 import com.example.roy.domain.map.LoadViewport
@@ -26,6 +28,7 @@ import kotlin.time.Instant
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -173,6 +176,45 @@ class MapViewModelTest {
         runCurrent()
 
         assertEquals(listOf<MapViewAction>(MapViewAction.OpenDetails(pointB.id)), actions)
+    }
+
+    @Test
+    fun reconnectRevalidatesCachedPreviewBeforeAllowingDetails() = mapTest {
+        val source = ControlledPoints()
+        val connectivity = MutableStateFlow(false)
+        var snapshot: String? = null
+        val cache = OfflineCache(
+            OfflineRecord({ snapshot }, { snapshot = it }, { snapshot = null }),
+            OfflineRecord({ null }, {}, {}),
+        )
+        cache.savePins(ViewportQuery(boundsA), listOf(pointA), MoscowCamera.center, MoscowCamera.zoom)
+        val model = MapViewModel(
+            LoadViewport(source), LoadPoint(source), DeviceLocation { DeviceLocationResult.Unavailable },
+            offlineCache = cache, connectivity = connectivity,
+        )
+        val actions = mutableListOf<MapViewAction>()
+        backgroundScope.launch { model.viewAction.collect { actions += it } }
+        runCurrent()
+        model.handleEvent(MapViewEvent.PinSelected(pointA.id))
+        assertEquals(PointPreview.Ready(pointA), model.viewState.value.preview)
+
+        connectivity.value = true
+        runCurrent()
+        source.page(boundsA).reply.resume(PointResult.Success(PointPage(emptyList(), null)))
+        runCurrent()
+        assertFalse(model.viewState.value.isUsingCache)
+        assertEquals(PointPreview.Loading, model.viewState.value.preview)
+        model.handleEvent(MapViewEvent.DetailsRequested)
+        runCurrent()
+        assertTrue(actions.isEmpty())
+
+        source.detail(pointA.id).resume(PointResult.Failure(PointError.ResourceGone))
+        runCurrent()
+        assertNull(model.viewState.value.preview)
+        assertNull(model.viewState.value.selectedPointId)
+        assertEquals(listOf<MapViewAction>(MapViewAction.PointGone), actions)
+        source.pages.last().reply.resume(PointResult.Success(PointPage(emptyList(), null)))
+        runCurrent()
     }
 
     @Test

@@ -72,7 +72,70 @@ class ProfileViewModelTest {
             runCurrent()
             assertEquals(2, fixture.repository.profileReads)
             assertEquals(1, fixture.repository.deletionCount)
-            assertFalse(model.viewState.value.isDeletionUncertain)
+            assertTrue(model.viewState.value.isDeletionUncertain)
+            assertFalse(model.viewState.value.canSubmit)
+            assertEquals(ProfileNotice.DeletionCheckAvailable, model.viewState.value.notice)
+            model.handleEvent(ProfileViewEvent.DialogDismissed)
+            model.handleEvent(ProfileViewEvent.LogoutRequested)
+            assertEquals(ProfileDialog.Logout, model.viewState.value.dialog)
+            model.handleEvent(ProfileViewEvent.DialogConfirmed)
+            runCurrent()
+            assertEquals(SessionStatus.Guest, fixture.session.state.value)
+            assertEquals(1, fixture.repository.deletionCount)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun canonicalNameSurvivesOfflineProfileRestart() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val fixture = Fixture.create()
+            fixture.model.handleEvent(ProfileViewEvent.Load)
+            runCurrent()
+            fixture.model.handleEvent(ProfileViewEvent.NameChanged("Новое имя"))
+            fixture.model.handleEvent(ProfileViewEvent.SaveName)
+            runCurrent()
+            val restarted = SessionCoordinator(SessionTestRepository(), fixture.store, allowOfflineRestore = true)
+            restarted.setOnline(false)
+            restarted.restore()
+            val scope = (restarted.state.value as SessionStatus.Active).scopeId
+            val offline = ProfileViewModel(scope, restarted, fixture.repository, MutableStateFlow(false))
+            runCurrent()
+            offline.handleEvent(ProfileViewEvent.Load)
+            runCurrent()
+            assertEquals("Новое имя", offline.viewState.value.user?.displayName)
+            assertTrue(offline.viewState.value.isCached)
+            assertEquals(1, fixture.repository.profileReads)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun populatedProfileRefreshesOnReconnectAndOnlyAllowsEditsAfterSuccess() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val fixture = Fixture.create()
+            val model = fixture.model
+            model.handleEvent(ProfileViewEvent.Load)
+            runCurrent()
+            assertTrue(model.viewState.value.canSubmit)
+            fixture.online.value = false
+            runCurrent()
+            assertTrue(model.viewState.value.isCached)
+            fixture.repository.isUnavailable = true
+            fixture.online.value = true
+            runCurrent()
+            assertEquals(2, fixture.repository.profileReads)
+            assertEquals(ProfileProblem.Unavailable, model.viewState.value.error)
+            assertFalse(model.viewState.value.canSubmit)
+            fixture.repository.isUnavailable = false
+            model.handleEvent(ProfileViewEvent.Load)
+            runCurrent()
+            assertEquals(3, fixture.repository.profileReads)
+            assertTrue(model.viewState.value.canSubmit)
         } finally {
             Dispatchers.resetMain()
         }
@@ -82,10 +145,14 @@ class ProfileViewModelTest {
         val model: ProfileViewModel,
         val repository: Repository,
         val online: MutableStateFlow<Boolean>,
+        val session: SessionCoordinator,
+        val store: SessionTestStore,
     ) {
         companion object {
             suspend fun create(): Fixture {
-                val session = SessionCoordinator(SessionTestRepository(), SessionTestStore())
+                val store = SessionTestStore()
+                val auth = SessionTestRepository().apply { revoke = { AuthResult.Success(Unit) } }
+                val session = SessionCoordinator(auth, store)
                 session.restore()
                 session.authenticate(AuthCredentials.Login("+123", "fixture"))
                 val scope = (session.state.value as SessionStatus.Active).scopeId
@@ -95,22 +162,27 @@ class ProfileViewModelTest {
                     current.phone, current.ageYears, current.messageMutedUntil, current.createdAt,
                 ))
                 val online = MutableStateFlow(true)
-                return Fixture(ProfileViewModel(scope, session, repository, online), repository, online)
+                return Fixture(ProfileViewModel(scope, session, repository, online), repository, online, session, store)
             }
         }
     }
 
-    private class Repository(private val user: AuthUser) : ProfileRepository {
+    private class Repository(private var user: AuthUser) : ProfileRepository {
         var profileReads = 0
         var uploadCount = 0
         var deletionCount = 0
+        var isUnavailable = false
 
         override suspend fun getProfile(token: String): AuthResult<ProfileResult<AuthUser>> {
             profileReads++
+            if (isUnavailable) return AuthResult.Success(ProfileResult.Rejected(ProfileProblem.Unavailable))
             return AuthResult.Success(ProfileResult.Value(user))
         }
 
-        override suspend fun updateName(name: String, token: String): AuthResult<ProfileResult<AuthUser>> = error("Unexpected save")
+        override suspend fun updateName(name: String, token: String): AuthResult<ProfileResult<AuthUser>> {
+            user = AuthUser(user.id, name, user.avatarUrl, user.phone, user.ageYears, user.messageMutedUntil, user.createdAt)
+            return AuthResult.Success(ProfileResult.Value(user))
+        }
 
         override suspend fun uploadAvatar(image: PickImageResult.Selected, token: String): AuthResult<ProfileResult<String>> {
             uploadCount++

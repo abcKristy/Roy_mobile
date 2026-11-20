@@ -121,20 +121,28 @@ internal class NotificationViewModel(
         }
     }
 
-    fun markRead(id: String) {
+    private fun markRead(id: String) {
         if (!current() || !viewState.value.online || viewState.value.items.any { it.id == id && it.readAt != null }) return
         if (!reading.add(id)) return
         viewModelScope.launch {
             try {
-                val result = session.mutateProtected(scopeId) { repository.markRead(id, it) }
-                currentCoroutineContext().ensureActive()
-                if (result is AuthResult.Success && current()) {
-                    updateState { state -> state.copy(items = state.items.map { if (it.id == id) result.value else it }) }
+                val result = confirmNotification(id)
+                if (result is AuthResult.Failure && current()) {
+                    updateState { it.copy(centerIssue = issue(result.error.code)) }
                 }
             } finally {
                 reading.remove(id)
             }
         }
+    }
+
+    suspend fun confirmNotification(id: String): AuthResult<NotificationEntry> {
+        val result = session.mutateProtected(scopeId) { repository.markRead(id, it) }
+        currentCoroutineContext().ensureActive()
+        if (result is AuthResult.Success && current()) {
+            updateState { state -> state.copy(items = state.items.map { if (it.id == id) result.value else it }) }
+        }
+        return result
     }
 
     fun onViewportSettled(position: Position) {

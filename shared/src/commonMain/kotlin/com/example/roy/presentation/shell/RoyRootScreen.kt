@@ -3,6 +3,7 @@ package com.example.roy.presentation.shell
 import androidx.compose.runtime.Composable
 import com.example.roy.MeetingNotificationTarget
 import com.example.roy.domain.auth.AuthResult
+import roy.shared.generated.resources.notifications_target_unavailable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -144,7 +145,7 @@ internal fun RoyRootScreen(
     }
     val profileModel = activeChatScope?.let { scopeId ->
         viewModel(viewModelStoreOwner = chatsOwner) {
-            ProfileViewModel(scopeId, session, profiles, connectivity) { registration?.logout(scopeId) ?: session.logout() }
+            ProfileViewModel(scopeId, session, profiles, connectivity) { registration?.logout(scopeId) ?: session.logout(scopeId) }
         }
     }
     val latestNotificationModel by rememberUpdatedState(notificationModel)
@@ -164,6 +165,7 @@ internal fun RoyRootScreen(
         }
     }
     val goneMessage = stringResource(Res.string.map_point_gone)
+    val notificationUnavailable = stringResource(Res.string.notifications_target_unavailable)
     val eventHandler: (RoyRootViewEvent) -> Unit = remember(viewModel) { viewModel::handleEvent }
 
     fun openPoint(route: RoyRoute.PointDetails) {
@@ -246,15 +248,21 @@ internal fun RoyRootScreen(
     }
     LaunchedEffect(deferredNotification, backStackEntry, activeChatScope) {
         val (scope, target) = deferredNotification ?: return@LaunchedEffect
-        if (scope != null && scope != activeChatScope) {
+        if (activeChatScope == null || (scope != null && scope != activeChatScope)) {
             deferredNotification = null
             return@LaunchedEffect
         }
         val destination = navController.currentDestination ?: return@LaunchedEffect
         if (destination.hasRoute<RoyRoute.ProtectedTarget>() || destination.hasRoute<RoyRoute.ProtectedAuth>()) return@LaunchedEffect
+        val result = notificationModel?.confirmNotification(target.notificationId)
+        if (session.state.value != SessionStatus.Active(activeChatScope)) return@LaunchedEffect
         deferredNotification = null
-        notificationModel?.markRead(target.notificationId)
-        openNotification(target)
+        val confirmed = (result as? AuthResult.Success)?.value?.target
+        if (confirmed == null) {
+            snackbar.show(RoySnackbarMessage(++snackbarMessageId, notificationUnavailable))
+        } else {
+            openNotification(confirmed)
+        }
     }
     LaunchedEffect(deferredMeeting, backStackEntry, activeChatScope) {
         val (scope, target) = deferredMeeting ?: return@LaunchedEffect

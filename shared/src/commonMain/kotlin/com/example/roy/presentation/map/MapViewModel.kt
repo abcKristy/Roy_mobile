@@ -112,7 +112,7 @@ internal class MapViewModel(
                 if (online == viewState.value.isOnline) return@collect
                 updateState { it.copy(isOnline = online, createPosition = null) }
                 val state = viewState.value
-                if (!online && state.selectedPointId != null) requestPoint(state.selectedPointId)
+                state.selectedPointId?.let(::requestPoint)
                 val last = if (!online) offlineCache?.lastPins(state.appliedFilter) else null
                 val query = if (last != null && state.points.isEmpty()) {
                     val camera = MapCamera(last.center, last.zoom)
@@ -218,7 +218,7 @@ internal class MapViewModel(
         val generation = ++detailGeneration
         detailJob?.cancel()
         updateState { it.copy(selectedPointId = pointId, preview = PointPreview.Loading) }
-        if (!viewState.value.isOnline || viewState.value.isUsingCache) {
+        if (!viewState.value.isOnline) {
             val point = viewState.value.points.firstOrNull { it.id == pointId }
             updateState { it.copy(preview = point?.let { value -> PointPreview.Ready(value) } ?: PointPreview.Failed(PointError.Network)) }
             return
@@ -231,6 +231,8 @@ internal class MapViewModel(
                 is PointResult.Failure -> {
                     if (result.error == PointError.ResourceGone) {
                         offlineCache?.evictPoint(pointId)
+                        coroutineContext.ensureActive()
+                        if (generation != detailGeneration) return@launch
                         updateState { state ->
                             state.copy(points = state.points.filterNot { it.id == pointId }, selectedPointId = null, preview = null)
                         }

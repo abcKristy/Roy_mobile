@@ -97,7 +97,7 @@ internal fun ProfileView(
         if (user == null && state.operation == ProfileOperation.Load) {
             LoadingState(LoadingMode.Inline, stringResource(Res.string.profile_loading))
         }
-        if (user == null && state.error != null) {
+        if (state.error != null && (user == null || state.failedOperation == ProfileOperation.Load)) {
             ErrorState(stringResource(state.error.resource), state.isOnline, { eventHandler(ProfileViewEvent.Load) })
         }
         if (user != null) {
@@ -150,7 +150,7 @@ internal fun ProfileView(
             )
             val error = state.error
             if (error != null && state.dialog == null &&
-                state.failedOperation !in setOf(ProfileOperation.Name, ProfileOperation.Avatar) &&
+                state.failedOperation !in setOf(ProfileOperation.Load, ProfileOperation.Name, ProfileOperation.Avatar) &&
                 (state.failedOperation != ProfileOperation.Password ||
                     error !in setOf(ProfileProblem.InvalidCurrentPassword, ProfileProblem.InvalidNewPassword))) {
                 ProfileText(stringResource(error.resource), live = true)
@@ -160,8 +160,9 @@ internal fun ProfileView(
                     ProfileNotice.NameSaved -> Res.string.profile_name_saved
                     ProfileNotice.AvatarSaved -> Res.string.profile_avatar_saved
                     ProfileNotice.AvatarRemoved -> Res.string.profile_avatar_removed
+                    ProfileNotice.DeletionCheckAvailable -> null
                 }
-                ProfileText(stringResource(message), live = true)
+                if (message != null) ProfileText(stringResource(message), live = true)
             }
         }
         val policy = state.policy
@@ -184,7 +185,7 @@ internal fun ProfileView(
             isEnabled = state.canSubmit,
         )
         if (state.isDeletionUncertain && state.dialog == null) {
-            ProfileText(stringResource(Res.string.profile_deletion_uncertain), live = true)
+            ProfileDeletionStatus(state)
             PrimaryButton(
                 stringResource(Res.string.profile_check_deletion), { eventHandler(ProfileViewEvent.CheckDeletion) },
                 isEnabled = state.isOnline && state.operation == null,
@@ -206,7 +207,7 @@ private fun ProfileConfirmation(state: ProfileViewState, dialog: ProfileDialog, 
     }
     val body = when (dialog) {
         ProfileDialog.AvatarRemoval -> Res.string.profile_remove_photo_body
-        ProfileDialog.Logout -> Res.string.profile_logout_body
+        ProfileDialog.Logout -> if (state.isOnline) Res.string.profile_logout_body else Res.string.profile_logout_offline_body
         ProfileDialog.Deletion -> Res.string.profile_delete_body
     }
     val confirm = when (dialog) {
@@ -230,8 +231,8 @@ private fun ProfileConfirmation(state: ProfileViewState, dialog: ProfileDialog, 
                     state.errorTextFor(ProfileOperation.Deletion, ProfileProblem.InvalidCurrentPassword),
                 ) { eventHandler(ProfileViewEvent.DeletionPasswordChanged(it)) }
             }
-            if (state.isDeletionUncertain) {
-                ProfileText(stringResource(Res.string.profile_deletion_uncertain), live = true)
+            if (dialog == ProfileDialog.Deletion && state.isDeletionUncertain) {
+                ProfileDeletionStatus(state)
                 PrimaryButton(
                     stringResource(Res.string.profile_check_deletion), { eventHandler(ProfileViewEvent.CheckDeletion) },
                     isEnabled = state.isOnline && !busy, isSubmitting = busy,
@@ -249,6 +250,16 @@ private fun ProfileConfirmation(state: ProfileViewState, dialog: ProfileDialog, 
             SecondaryButton(stringResource(Res.string.profile_cancel), dismiss, isEnabled = !busy)
         }
     }
+}
+
+@Composable
+private fun ProfileDeletionStatus(state: ProfileViewState) {
+    val message = if (state.notice == ProfileNotice.DeletionCheckAvailable) {
+        Res.string.profile_deletion_currently_available
+    } else {
+        Res.string.profile_deletion_uncertain
+    }
+    ProfileText(stringResource(message), live = true)
 }
 
 @Composable

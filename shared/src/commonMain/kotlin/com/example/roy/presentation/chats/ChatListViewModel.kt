@@ -183,9 +183,16 @@ internal class ChatListViewModel(
     private suspend fun restoreOfflineList() {
         val cached = offlineCache?.let { cache -> sessions?.withOfflineAccount(scopeId) { cache.readChatList(it) } }
         currentCoroutineContext().ensureActive()
-        updateState {
-            if (cached == null) it.copy(isLoading = false, error = AuthErrorCode.Network, nextCursor = null)
-            else it.copy(rows = cached.rows, cachedFetchedAt = cached.fetchedAt, nextCursor = null, isLoading = false, error = null)
+        failedLoadingMore = false
+        updateState { state ->
+            if (cached == null) state.copy(isLoading = false, error = AuthErrorCode.Network, nextCursor = null)
+            else state.copy(
+                rows = cached.rows,
+                cachedFetchedAt = cached.fetchedAt,
+                nextCursor = null,
+                isLoading = false,
+                error = AuthErrorCode.Network.takeIf { state.isOnline },
+            )
         }
     }
 }

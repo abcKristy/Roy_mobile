@@ -11,6 +11,7 @@ class PushRuntime(
     internal val platform: String,
     initiallyRegistered: Boolean = false,
     private val persistRegistration: (Boolean) -> Unit = {},
+    private val onAccountChanged: (String?) -> Unit = {},
     private val requestAuthorization: () -> Unit,
 ) {
     private val authorizationState = MutableStateFlow(PushAuthorization.NotAsked)
@@ -26,6 +27,8 @@ class PushRuntime(
     }
 
     fun requestPermission() = requestAuthorization()
+
+    internal fun updateAccount(userId: String?) = onAccountChanged(userId)
 
     fun updateAuthorization(authorization: PushAuthorization) {
         authorizationState.value = authorization

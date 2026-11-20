@@ -9,7 +9,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import com.example.roy.domain.notifications.NotificationTarget
 import com.example.roy.shared.RoyAndroidApp
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -17,8 +16,6 @@ import kotlinx.coroutines.flow.receiveAsFlow
 class MainActivity : ComponentActivity() {
     private val meetingTargets = Channel<MeetingNotificationTarget>(Channel.CONFLATED)
     private val meetingTargetFlow = meetingTargets.receiveAsFlow()
-    private val notificationTargets = Channel<NotificationTarget>(Channel.CONFLATED)
-    private val notificationTargetFlow = notificationTargets.receiveAsFlow()
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
         RoyPush.refreshPermission()
     }
@@ -29,7 +26,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) receiveMeetingTarget(intent)
 
         setContent {
-            RoyAndroidApp(applicationContext, apiOrigin(), meetingTargetFlow, notificationTargetFlow, RoyPush.runtime)
+            RoyAndroidApp(applicationContext, apiOrigin(), meetingTargetFlow, RoyPush.notificationTargets, RoyPush.runtime)
         }
     }
 
@@ -62,12 +59,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun receiveMeetingTarget(intent: Intent?) {
-        if (intent == null) return
-        val notification = RoyPush.target(RoyPush.payload(intent))
-        if (notification != null) {
-            notificationTargets.trySend(notification)
-            return
-        }
+        if (!BuildConfig.DEBUG || intent == null || intent.hasExtra("notificationId")) return
         val target = MeetingNotificationTarget.fromPayload(
             intent.getStringExtra("v"), intent.getStringExtra("kind"), intent.getStringExtra("pointId"),
             intent.getStringExtra("chatId"), intent.getStringExtra("proposalId"),

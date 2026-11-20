@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 
 internal enum class ProfileOperation { Load, Name, Avatar, Password, Logout, Deletion }
 internal enum class ProfileDialog { AvatarRemoval, Logout, Deletion }
-internal enum class ProfileNotice { NameSaved, AvatarSaved, AvatarRemoved }
+internal enum class ProfileNotice { NameSaved, AvatarSaved, AvatarRemoved, DeletionCheckAvailable }
 
 internal data class ProfileViewState(
     val user: AuthUser? = null,
@@ -81,9 +81,10 @@ internal class ProfileViewModel(
     private val session: SessionCoordinator,
     private val repository: ProfileRepository,
     connectivity: Flow<Boolean>,
-    private val logout: suspend () -> AuthResult<Unit> = session::logout,
+    private val logout: suspend () -> AuthResult<Unit> = { session.logout(scopeId) },
 ) : BaseViewModel<ProfileViewState, ProfileViewEvent, ProfileViewAction>(ProfileViewState()) {
     private val isCurrent get() = session.state.value == SessionStatus.Active(scopeId)
+    private var reloadAfterReconnect = false
 
     init {
         viewModelScope.launch {
@@ -92,8 +93,11 @@ internal class ProfileViewModel(
         viewModelScope.launch {
             connectivity.collect { online ->
                 val wasOnline = viewState.value.isOnline
-                updateState { it.copy(isOnline = online) }
-                if (online && !wasOnline && (viewState.value.isCached || viewState.value.user == null)) load()
+                updateState { it.copy(isOnline = online, isCached = it.isCached || (!online && it.user != null)) }
+                if (online && !wasOnline) {
+                    reloadAfterReconnect = true
+                    load()
+                }
             }
         }
     }
@@ -130,6 +134,8 @@ internal class ProfileViewModel(
 
     private fun load() {
         val state = viewState.value
+        if (!isCurrent || state.operation != null) return
+        reloadAfterReconnect = false
         if (state.isDeletionUncertain) return
         runOperation(ProfileOperation.Load) {
             if (!state.isOnline) {
@@ -138,12 +144,22 @@ internal class ProfileViewModel(
             }
             val user = session.readProtected(scopeId, repository::getProfile).resolve(ProfileOperation.Load)
             if (user == null) {
-                if (viewState.value.error == ProfileProblem.Network) loadCached()
+                loadCached()
+                return@runOperation
+            }
+            if (!session.updateCachedUser(scopeId, user)) {
+                if (isCurrent) {
+                    fail(ProfileOperation.Load, ProfileProblem.UnexpectedResponse)
+                    loadCached()
+                }
                 return@runOperation
             }
             updateState {
                 val draft = it.nameDraft.takeIf { current -> it.user != null && current != it.user.displayName }
-                it.copy(user = user, nameDraft = draft ?: user.displayName, hasAvatar = user.avatarUrl != null, isCached = false)
+                it.copy(
+                    user = user, nameDraft = draft ?: user.displayName,
+                    hasAvatar = user.avatarUrl != null, isCached = !it.isOnline,
+                )
             }
             if (user.avatarUrl != null) readAvatar(user.id, state.avatar?.etag)
             else updateState { it.copy(avatar = null) }
@@ -153,9 +169,14 @@ internal class ProfileViewModel(
     }
 
     private suspend fun loadCached() {
-        if (viewState.value.user != null) return
+        if (viewState.value.user != null) {
+            updateState { it.copy(isCached = true) }
+            return
+        }
         val user = session.cachedUser(scopeId) ?: return
-        if (isCurrent) updateState { it.copy(user = user, nameDraft = user.displayName, isCached = true) }
+        if (isCurrent) updateState {
+            it.copy(user = user, nameDraft = user.displayName, hasAvatar = user.avatarUrl != null, isCached = true)
+        }
     }
 
     private fun edit(operation: ProfileOperation, change: (ProfileViewState) -> ProfileViewState) {
@@ -172,8 +193,10 @@ internal class ProfileViewModel(
         runOperation(ProfileOperation.Name) {
             val updated = session.mutateProtected(scopeId) { repository.updateName(state.nameDraft.trim(), it) }
                 .resolve(ProfileOperation.Name) ?: return@runOperation
-            if (updated.id == state.user?.id) {
+            if (session.updateCachedUser(scopeId, updated)) {
                 updateState { it.copy(user = updated, nameDraft = updated.displayName, notice = ProfileNotice.NameSaved) }
+            } else if (isCurrent) {
+                fail(ProfileOperation.Name, ProfileProblem.UnexpectedResponse)
             }
         }
     }
@@ -196,7 +219,7 @@ internal class ProfileViewModel(
 
     private fun uploadAvatar(image: PickImageResult.Selected) {
         val user = viewState.value.user ?: return
-        val failure = image.validationError() ?: ProfileProblem.Network.takeUnless { viewState.value.isOnline }
+        val failure = image.validationError() ?: ProfileProblem.Network.takeUnless { viewState.value.canSubmit }
         if (failure != null) {
             fail(ProfileOperation.Avatar, failure)
             return
@@ -204,7 +227,9 @@ internal class ProfileViewModel(
         runOperation(ProfileOperation.Avatar) {
             val url = session.mutateProtected(scopeId) { repository.uploadAvatar(image, it) }
                 .resolve(ProfileOperation.Avatar) ?: return@runOperation
-            updateState { it.copy(user = user.withAvatar(url), hasAvatar = true, notice = ProfileNotice.AvatarSaved) }
+            val updated = user.withAvatar(url)
+            if (!session.updateCachedUser(scopeId, updated)) return@runOperation
+            updateState { it.copy(user = updated, hasAvatar = true, notice = ProfileNotice.AvatarSaved) }
             readAvatar(user.id, null)
         }
     }
@@ -242,15 +267,18 @@ internal class ProfileViewModel(
         if (!state.canSubmit && (state.dialog != ProfileDialog.Logout || state.operation != null)) return
         when (state.dialog) {
             ProfileDialog.AvatarRemoval -> runOperation(ProfileOperation.Avatar) {
+                val user = state.user ?: return@runOperation
                 session.mutateProtected(scopeId, repository::deleteAvatar)
                     .resolve(ProfileOperation.Avatar) ?: return@runOperation
+                val updated = user.withAvatar(null)
+                if (!session.updateCachedUser(scopeId, updated)) return@runOperation
                 updateState { it.copy(
-                    user = it.user?.withAvatar(null), hasAvatar = false, avatar = null, dialog = null,
+                    user = updated, hasAvatar = false, avatar = null, dialog = null,
                     notice = ProfileNotice.AvatarRemoved,
                 ) }
             }
             ProfileDialog.Logout -> runOperation(ProfileOperation.Logout) {
-                val result = if (state.isOnline) logout() else session.logout()
+                val result = if (state.isOnline) logout() else session.logout(scopeId)
                 if (result is AuthResult.Failure && isCurrent) fail(ProfileOperation.Logout, result.error.code.problem())
             }
             ProfileDialog.Deletion -> deleteAccount()
@@ -280,7 +308,11 @@ internal class ProfileViewModel(
             val result = session.readProtected(scopeId, repository::getProfile)
             if (!isCurrent) return@runOperation
             val user = result.resolve(ProfileOperation.Deletion) ?: return@runOperation
-            updateState { it.copy(isDeletionUncertain = false, user = user, dialog = null, deletionPassword = "") }
+            if (user.id == viewState.value.user?.id) {
+                updateState { it.copy(notice = ProfileNotice.DeletionCheckAvailable) }
+            } else {
+                fail(ProfileOperation.Deletion, ProfileProblem.UnexpectedResponse)
+            }
         }
     }
 
@@ -296,7 +328,10 @@ internal class ProfileViewModel(
             try {
                 execute()
             } finally {
-                if (isCurrent) updateState { it.copy(operation = null) }
+                if (isCurrent) {
+                    updateState { it.copy(operation = null) }
+                    if (reloadAfterReconnect && viewState.value.isOnline) load()
+                }
             }
         }
     }

@@ -21,6 +21,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -86,5 +87,69 @@ class PushRegistrationTest {
         assertEquals(SessionStatus.Guest, session.state.value)
         assertEquals(1, logoutAttempts)
         assertEquals(2, attempts)
+    }
+
+    @Test
+    fun disabledRegistrationDoesNotLeaveAFalseBindingThatBlocksLogout() = runTest {
+        val auth = SessionTestRepository().apply { revoke = { AuthResult.Success(Unit) } }
+        val session = SessionCoordinator(auth, SessionTestStore().apply { saved = auth.first })
+        session.restore()
+        val active = session.state.value as SessionStatus.Active
+        val runtime = PushRuntime("04bc8bc5-f271-47f2-9035-be434691a450", "android") {}
+        val registration = PushRegistration("https://example.invalid", AuthHttpTransport {
+            assertEquals(AuthHttpMethod.Put, it.method)
+            AuthHttpResponse(503, """{"error":{"code":"PUSH_REGISTRATION_FAILED"}}""")
+        }, session, runtime)
+        runtime.updateAuthorization(PushAuthorization.Allowed)
+        runtime.updateToken("synthetic")
+        backgroundScope.launch { registration.observe(MutableStateFlow(true)) }
+        runCurrent()
+
+        assertFalse(runtime.hasRegistration)
+        assertTrue(registration.logout(active.scopeId) is AuthResult.Success)
+    }
+
+    @Test
+    fun missingPushEndpointDoesNotTrapAnExistingInstallationInItsSession() = runTest {
+        val auth = SessionTestRepository().apply { revoke = { AuthResult.Success(Unit) } }
+        val session = SessionCoordinator(auth, SessionTestStore().apply { saved = auth.first })
+        session.restore()
+        val active = session.state.value as SessionStatus.Active
+        val runtime = PushRuntime("04bc8bc5-f271-47f2-9035-be434691a450", "android", initiallyRegistered = true) {}
+        val registration = PushRegistration("https://example.invalid", AuthHttpTransport {
+            assertEquals(AuthHttpMethod.Delete, it.method)
+            AuthHttpResponse(404, "")
+        }, session, runtime)
+
+        assertTrue(registration.logout(active.scopeId) is AuthResult.Success)
+        assertTrue(runtime.hasRegistration)
+        assertEquals(SessionStatus.Guest, session.state.value)
+    }
+
+    @Test
+    fun rebootWaitsForTokenWhileAllowedButRevokesSavedBindingWhenPermissionIsDenied() = runTest {
+        val auth = SessionTestRepository()
+        val session = SessionCoordinator(auth, SessionTestStore().apply { saved = auth.first })
+        session.restore()
+        val runtime = PushRuntime("04bc8bc5-f271-47f2-9035-be434691a450", "android", initiallyRegistered = true) {}
+        var deletions = 0
+        val registration = PushRegistration("https://example.invalid", AuthHttpTransport {
+            assertEquals(AuthHttpMethod.Delete, it.method)
+            deletions++
+            AuthHttpResponse(204, "")
+        }, session, runtime)
+        backgroundScope.launch { registration.observe(MutableStateFlow(true)) }
+        runCurrent()
+        assertEquals(0, deletions)
+        runtime.updateAuthorization(PushAuthorization.Allowed)
+        runCurrent()
+        assertEquals(0, deletions)
+        assertTrue(runtime.hasRegistration)
+
+        runtime.updateAuthorization(PushAuthorization.Denied)
+        runCurrent()
+
+        assertEquals(1, deletions)
+        assertFalse(runtime.hasRegistration)
     }
 }

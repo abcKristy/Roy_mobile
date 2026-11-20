@@ -5,6 +5,8 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.time.Instant
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 
 class SessionCoordinatorTest {
@@ -80,6 +82,76 @@ class SessionCoordinatorTest {
         assertEquals(null, session.cachedUser(scope))
         assertEquals(null, store.saved)
         assertEquals(1, purges)
+    }
+
+    @Test
+    fun explicitMutationRechecksIdentityAfterTransientReconnectFailure() = runTest {
+        val repository = SessionTestRepository().apply {
+            profile = {
+                if (profileReads == 1) AuthResult.Failure(AuthError(AuthErrorCode.Network))
+                else AuthResult.Success(user)
+            }
+        }
+        val session = SessionCoordinator(repository, SessionTestStore().apply { saved = repository.first },
+            allowOfflineRestore = true)
+        session.setOnline(false)
+        session.restore()
+        val scope = assertIs<SessionStatus.Active>(session.state.value).scopeId
+        session.setOnline(true)
+
+        assertIs<AuthResult.Success<Unit>>(session.mutateProtected(scope) { AuthResult.Success(Unit) })
+        assertEquals(2, repository.profileReads)
+    }
+
+    @Test
+    fun reconnectWithUnexpectedIdentityClearsTheLocalAccount() = runTest {
+        val repository = SessionTestRepository()
+        val store = SessionTestStore().apply { saved = repository.first }
+        val accountChanges = mutableListOf<String?>()
+        val session = SessionCoordinator(repository, store, allowOfflineRestore = true,
+            onAccountChanged = { accountChanges.add(it) })
+        session.setOnline(false)
+        session.restore()
+        val user = repository.user
+        repository.profile = { AuthResult.Success(AuthUser("other", user.displayName, null, user.phone,
+            user.ageYears, null, user.createdAt)) }
+
+        session.setOnline(true)
+
+        assertEquals(SessionStatus.Guest, session.state.value)
+        assertEquals(null, store.saved)
+        assertEquals(listOf(user.id, null), accountChanges)
+    }
+
+    @Test
+    fun profileSnapshotSavedDuringRotationKeepsBothTheNewProfileAndCredentials() = runTest {
+        val repository = SessionTestRepository()
+        val store = SessionTestStore().apply { saved = repository.first }
+        val session = SessionCoordinator(repository, store)
+        session.restore()
+        val scope = assertIs<SessionStatus.Active>(session.state.value).scopeId
+        val started = CompletableDeferred<Unit>()
+        val finish = CompletableDeferred<Unit>()
+        val user = repository.user
+        repository.rotation = {
+            started.complete(Unit)
+            finish.await()
+            val old = repository.first
+            AuthResult.Success(AuthSession("new-access", old.expiresAt, "new-refresh", old.refreshExpiresAt, user))
+        }
+        val request = async {
+            session.readProtected(scope) {
+                if (it == "new-access") AuthResult.Success(Unit) else AuthResult.Failure(AuthError(AuthErrorCode.AuthRequired))
+            }
+        }
+        started.await()
+        val updated = AuthUser(user.id, "Новое имя", null, user.phone, user.ageYears, null, user.createdAt)
+        assertEquals(true, session.updateCachedUser(scope, updated))
+        finish.complete(Unit)
+
+        assertIs<AuthResult.Success<Unit>>(request.await())
+        assertEquals("new-refresh", store.saved?.refreshToken)
+        assertSame(updated, store.saved?.user)
     }
 }
 

@@ -8,7 +8,7 @@ import android.content.Intent
 class DebugPushFixtureReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            "com.example.roy.debug.PUSH_TOKEN" -> RoyPush.runtime.updateToken(intent.getStringExtra("token"))
+            "com.example.roy.debug.PUSH_TOKEN" -> RoyPush.updateProviderToken(intent.getStringExtra("token"))
             "com.example.roy.debug.PUSH_MESSAGE" -> RoyPush.show(context, RoyPush.payload(intent))
         }
     }
