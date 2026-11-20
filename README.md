@@ -1,6 +1,6 @@
 This is a Kotlin Multiplatform project targeting Android, iOS.
 
-### Scaffold inventory
+### Project inventory
 
 The existing Gradle root is `Roy`. It includes `:shared` and `:androidApp`. The
 separate Xcode app consumes the static `Shared` framework. Backend runs in a
@@ -13,12 +13,9 @@ contracts and fixtures.
   Android device test source set without starter tests in its directory.
 - Both entry points already call the shared `App()`: Android `MainActivity`
   via `setContent` and SwiftUI `ComposeView` via iOS `MainViewController`.
-- Planned packages under the existing shared common root are
-  `presentation/theme` for theme roles, `presentation/components` for
-  primitives, `presentation/core` for MVI and `presentation/navigation` for
-  routes. Later auth work uses `presentation/auth`, `domain/auth` and
-  `data/auth`, with presentation and data depending on domain. These packages
-  are not present in the baseline.
+- Shared code is organized by feature under `presentation`, `domain` and `data`.
+  Presentation contains the MVI contracts, navigation, theme and reusable UI.
+  Platform adapters and the Android/iOS composition roots supply native services.
 - Compose Resources already uses `shared/src/commonMain/composeResources`.
   Russian MVP UI strings go in its `values/strings.xml` as the default
   language. The Android launcher label remains an Android resource.
@@ -53,8 +50,7 @@ Baseline on 2026-11-11 before editing application sources:
   - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
     For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
     the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-    folder is the appropriate location.
+    This project does not configure a desktop/JVM application target.
 
 ### Running the apps
 
@@ -105,9 +101,9 @@ For Android Debug, run the backend with synthetic PostGIS fixtures, then map dev
 
 On the guest map, choose a location and tap **Создать точку**, or open a public point and choose one of its topic chats. Cancel returns to the source screen. Successful sign-in consumes the pending action once. The create route hands off the selected coordinates and freshly reads nearby points and quota. A topic route re-reads the public point and checks membership through authenticated chat detail before handing off the chat ID.
 
-The prepared destinations exercise the contracts for the creation form and chat screens. Sign-in sends no create or join request. A pending action is held in memory, and a cold start with a restored protected route returns to the map. Terminal session expiry opens sign-in once and clears access to the protected destination.
+The protected destinations open the creation form and topic chat screens. Sign-in sends no create or join request. A pending action is held in memory, and a cold start with a restored protected route returns to the map. Terminal session expiry opens sign-in once and clears access to the protected destination.
 
-The next mobile slices can use `PointRepository`, `RoyRoute.PointDetails(pointId)`, the map's `onPositionTapped(Position)` callback, and `MapViewEvent.FilterChanged`. See the [map cards and acceptance evidence](../../spec/plans/tasks/M1/T4/README.md).
+Map integration uses `PointRepository`, `RoyRoute.PointDetails(pointId)`, the map surface's `onMapTapped(Position)` callback, and `MapViewEvent.OnFilterChanged`. See the [map cards and acceptance evidence](../../spec/plans/tasks/M1/T4/README.md).
 
 ## Local Android candidate verification
 

@@ -1,14 +1,17 @@
-# Run on a disposable Android emulator with the local backend on port 18080.
+﻿# Run on a disposable Android emulator with a local backend.
 # The emulator must be unlocked and Roy must be signed out.
 param(
     [Parameter(Mandatory)][string]$Apk,
     [string]$Serial = 'emulator-5554',
-    [string]$Adb = 'adb'
+    [string]$Adb = 'adb',
+    [ValidateRange(1, 65535)][int]$BackendPort = 18080
 )
 $ErrorActionPreference = 'Stop'
 $package = 'com.example.roy'
-$login = 'С возвращением'
-$register = 'Создайте профиль'
+# Submit labels identify the mode even when the IME scrolls the heading out of view.
+$login = 'Войти'
+$register = 'Создать профиль'
+$profile = 'Профиль'
 $switch = 'Нет аккаунта? Зарегистрироваться'
 $dump = '/data/local/tmp/roy-mode-back.xml'
 
@@ -35,17 +38,43 @@ function Wait-Label([string]$Label) {
     throw "App label absent: $Label"
 }
 
+function Invoke-NodeTap($Node) {
+    if ($Node.bounds -notmatch '^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$') { throw 'Invalid UI node bounds' }
+    $x = [int](([int]$Matches[1] + [int]$Matches[3]) / 2)
+    $y = [int](([int]$Matches[2] + [int]$Matches[4]) / 2)
+    $null = Invoke-Device shell input tap $x $y
+}
+
+function ConvertFrom-ImeVisibilityDump([string]$Dump) {
+    # InputMethodService may retain mIsInputViewShown after its window is hidden.
+    # Use the manager's current input state; fail explicitly on an unknown dump format.
+    $states = @([regex]::Matches($Dump, '(?m)^\s*mInputShown=(true|false)\b') |
+        ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique)
+    if ($states.Count -ne 1) { throw 'Missing or ambiguous manager mInputShown state' }
+    return $states[0] -eq 'true'
+}
+
 function Test-ImeVisible {
-    [bool](Invoke-Device shell dumpsys input_method | Select-String '^\s*m(InputShown|IsInputViewShown)=true\b')
+    ConvertFrom-ImeVisibilityDump ((Invoke-Device shell dumpsys input_method) -join "`n")
+}
+
+function Wait-ImeHidden {
+    for ($attempt = 0; $attempt -lt 10; $attempt++) {
+        if (!(Test-ImeVisible)) { return }
+        Start-Sleep -Milliseconds 200
+    }
+    throw 'IME remained visible after dismissal'
 }
 
 $apkPath = (Resolve-Path -LiteralPath $Apk).Path
 Get-FileHash -LiteralPath $apkPath -Algorithm SHA256
 try {
-    $null = Invoke-Device reverse tcp:18080 tcp:18080
+    $null = Invoke-Device reverse tcp:18080 "tcp:$BackendPort"
     $null = Invoke-Device install -r $apkPath
     $null = Invoke-Device shell am force-stop $package
     $null = Invoke-Device shell am start -W -n "$package/.MainActivity"
+    # A signed-out cold launch opens the guest map. Profile owns the login entry.
+    Invoke-NodeTap (Wait-Label $profile)
     $null = Wait-Label $login
 
     foreach ($tapCount in 1,2,2,2) {
@@ -60,7 +89,7 @@ try {
             # If the second tap hit an editor, the IME consumes its own Back first.
             $null = Invoke-Device shell input keyevent KEYCODE_BACK
             $null = Wait-Label $register
-            if (Test-ImeVisible) { throw 'IME remained visible after dismissal' }
+            Wait-ImeHidden
         }
         $null = Invoke-Device shell input keyevent KEYCODE_BACK
         $null = Wait-Label $login
@@ -69,5 +98,6 @@ try {
         "PASS: $tapCount registration tap(s), one system Back, login remains visible"
     }
 } finally {
-    $null = Invoke-Device shell rm -f $dump
+    try { $null = Invoke-Device shell rm -f $dump }
+    catch { Write-Warning "Could not remove temporary UI dump: $_" }
 }
