@@ -108,3 +108,37 @@ On the guest map, choose a location and tap **Создать точку**, or op
 The prepared destinations exercise the contracts for the creation form and chat screens. Sign-in sends no create or join request. A pending action is held in memory, and a cold start with a restored protected route returns to the map. Terminal session expiry opens sign-in once and clears access to the protected destination.
 
 The next mobile slices can use `PointRepository`, `RoyRoute.PointDetails(pointId)`, the map's `onPositionTapped(Position)` callback, and `MapViewEvent.FilterChanged`. See the [map cards and acceptance evidence](../../spec/plans/tasks/M1/T4/README.md).
+
+## Local Android candidate verification
+
+Run the wrapper from this directory with a working JDK in `JAVA_HOME` and the
+Android SDK configured in local, ignored `local.properties`. Discover the
+available device with `adb devices -l` before running connected tests.
+
+```powershell
+.\gradlew.bat --offline --console=plain --max-workers=2 :androidApp:assembleDebug :shared:testAndroidHostTest :shared:assembleAndroidDeviceTest
+.\gradlew.bat --offline --console=plain --max-workers=2 :androidApp:assembleRelease
+# Select the actual test-device serial; host tests do not replace this task.
+$env:ANDROID_SERIAL = '<discovered-serial>'
+.\gradlew.bat --offline --console=plain --max-workers=2 :shared:connectedAndroidDeviceTest
+```
+
+The current release configuration produces
+`androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk`.
+It has no project signing configuration and uses the placeholder API origin
+`https://roy.invalid`. Do not treat a successful build as signed install/update
+acceptance or as a configured server release. Debug uses the local backend via
+`adb -s <serial> reverse tcp:18080 tcp:<actual-backend-port>`.
+
+Audit the exact APK with the installed Android Build Tools and an explicit
+candidate identifier (commit plus dirty-tree manifest when applicable):
+
+```powershell
+.\tools\verify-android-release.ps1 -Apk <apk-path> -BuildTools <sdk-build-tools-directory> -Candidate <candidate-id> -OutputJson build/release-audit.json
+```
+
+The audit records SHA-256, decimal bytes/MB, the inclusive 60,000,000-byte
+threshold, signature classification and debug markers. It does not establish
+secure-store behavior, runtime API configuration, absence of every possible
+secret, or install/update compatibility. Keep original APKs and per-run logs;
+new source changes require a new candidate passport and affected-case reruns.
